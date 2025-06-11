@@ -439,9 +439,6 @@ const sceneElements = ref<Record<number, CanvasElement[]>>({
   4: []
 })
 
-// Selected element
-const selectedElement = ref<string | null>(null)
-
 // Media streams
 const cameraStream = ref<MediaStream | null>(null)
 const screenStream = ref<MediaStream | null>(null)
@@ -1013,33 +1010,45 @@ onMounted(() => {
         <div class="bg-gray-800 border-b border-gray-700 px-6 py-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-4">
-              <!-- Format Toggle -->
-              <button
-                @click="toggleCanvasFormat"
-                class="flex items-center space-x-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition-colors duration-200"
+                <!-- Grid Toggle -->
+                <button
+                  @click="showGrid = !showGrid"
+                  :class="[
+                    'flex items-center space-x-2 px-3 py-2 rounded-xl transition-colors duration-200',
+                    showGrid ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+                  ]"
+                  :title="showGrid ? 'Masquer la grille' : 'Afficher la grille'"
+                >
+                  <Grid3X3 :size="18" />
+                </button>
+
+                <!-- Format Toggle -->
+                <button
+                  @click="toggleCanvasFormat"
+                  class="flex items-center space-x-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition-colors duration-200"
               >
                 <Monitor class="w-4 h-4" />
                 <span class="text-sm">{{ canvasFormat }}</span>
               </button>
 
-              <!-- Bouton Copier le lien (visible uniquement en live) -->
-              <div v-if="isLive && shareUrl" class="relative">
-                <div class="flex rounded-md shadow-sm">
-                  <input
-                    type="text"
-                    :value="shareUrl"
-                    readonly
-                    class="flex-1 min-w-0 block w-full px-3 py-2 rounded-l-md border-0 bg-gray-700 text-white text-sm"
-                    style="min-width: 300px;"
-                  >
-                  <button
-                    @click="copyToClipboard"
-                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-r-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    {{ copyButtonText }}
-                  </button>
+                <!-- Bouton Copier le lien (visible uniquement en live) -->
+                <div v-if="isLive && shareUrl" class="relative">
+                  <div class="flex rounded-md shadow-sm">
+                    <input
+                      type="text"
+                      :value="shareUrl"
+                      readonly
+                      class="flex-1 min-w-0 block w-full px-3 py-2 rounded-l-md border-0 bg-gray-700 text-white text-sm"
+                      style="min-width: 300px;"
+                    >
+                    <button
+                      @click="copyToClipboard"
+                      class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-r-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      {{ copyButtonText }}
+                    </button>
+                  </div>
                 </div>
-              </div>
                 
               <!-- Bouton Enregistrer avec menu de résolution -->
               <div class="relative">

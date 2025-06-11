@@ -27,6 +27,7 @@ const props = defineProps<{
   selectedElement: string | null
   snapEnabled: boolean
   isLive: boolean
+  showGrid?: boolean
 }>()
 
 const emit = defineEmits(['element-select', 'element-update', 'element-edit'])
@@ -282,23 +283,60 @@ function handleTouchEnd() {
 // Dessin du canvas à chaque frame
 let animationFrame: number
 
+function drawGrid(ctx: CanvasRenderingContext2D) {
+  if (!props.showGrid) return
+  
+  const { width, height } = canvasDimensions.value
+  const gridSize = 20
+  const lineColor = 'rgba(255, 255, 255, 0.1)'
+  
+  ctx.strokeStyle = lineColor
+  ctx.lineWidth = 1
+  
+  // Lignes verticales
+  for (let x = 0; x <= width; x += gridSize) {
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, height)
+    ctx.stroke()
+  }
+  
+  // Lignes horizontales
+  for (let y = 0; y <= height; y += gridSize) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(width, y)
+    ctx.stroke()
+  }
+}
+
 function drawCanvas() {
   const canvas = canvasRef.value
   if (!canvas) return
+  
   const ctx = canvas.getContext('2d')
   if (!ctx) return
-
-  // Fixe les dimensions physiques
+  
+  // Mettre à jour la taille du canvas si nécessaire
   if (canvas.width !== canvasDimensions.value.width || canvas.height !== canvasDimensions.value.height) {
     canvas.width = canvasDimensions.value.width
     canvas.height = canvasDimensions.value.height
   }
 
-  // Efface le canvas
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  // Sauvegarder l'état du contexte
   ctx.save()
+  
+  // Effacer le canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  
+  // Dessiner un fond noir
   ctx.fillStyle = 'black'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
+  
+  // Dessiner la grille si activée
+  drawGrid(ctx)
+  
+  // Restaurer l'état du contexte
   ctx.restore()
 
   props.elements.forEach(element => {

@@ -1,38 +1,88 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import { Plus, Play, Edit3, Download, Calendar, Clock, Users, Video, Settings } from 'lucide-vue-next'
-import Header from '../components/Header.vue'
+import { supabase } from '../supabase'
 
-const webinars = ref([
-  {
-    id: 1,
-    title: 'Introduction to Vue 3 Composition API',
-    status: 'upcoming',
-    date: '2025-01-20T14:00:00Z',
-    duration: null,
-    attendees: 45,
-    thumbnail: 'https://images.pexels.com/photos/546819/pexels-photo-546819.jpeg?auto=compress&cs=tinysrgb&w=400'
-  },
-  {
-    id: 2,
-    title: 'Building Modern Web Applications',
-    status: 'ended',
-    date: '2025-01-15T16:00:00Z',
-    duration: '1h 32m',
-    attendees: 128,
-    thumbnail: 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=400'
-  },
-  {
-    id: 3,
-    title: 'TypeScript Best Practices Workshop',
-    status: 'ended',
-    date: '2025-01-10T18:00:00Z',
-    duration: '2h 15m',
-    attendees: 89,
-    thumbnail: 'https://images.pexels.com/photos/1181244/pexels-photo-1181244.jpeg?auto=compress&cs=tinysrgb&w=400'
+const router = useRouter()
+const user = ref<any>(null)
+const loading = ref(true)
+
+const projects = ref<any[]>([])
+
+// Récupérer les projets de l'utilisateur
+const fetchProjects = async () => {
+  try {
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    
+    if (!currentUser) {
+      router.push('/login')
+      return
+    }
+    
+    user.value = currentUser
+    
+    // Récupérer les projets de l'utilisateur
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    
+    projects.value = data || []
+  } catch (error) {
+    console.error('Error fetching projects:', error)
+  } finally {
+    loading.value = false
   }
-])
+}
+
+// Déconnexion
+const handleSignOut = async () => {
+  try {
+    await supabase.auth.signOut()
+    router.push('/login')
+  } catch (error) {
+    console.error('Error signing out:', error)
+  }
+}
+
+// Créer un nouveau projet
+const createNewProject = async () => {
+  try {
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    
+    if (!currentUser) {
+      router.push('/login')
+      return
+    }
+    
+    const { data, error } = await supabase
+      .from('projects')
+      .insert([
+        { 
+          user_id: currentUser.id, 
+          title: `Nouveau projet ${new Date().toLocaleDateString()}` 
+        },
+      ])
+      .select()
+      .single()
+    
+    if (error) throw error
+    
+    // Rediriger vers l'éditeur avec le nouveau projet
+    router.push(`/studio/${data.id}`)
+  } catch (error) {
+    console.error('Error creating project:', error)
+  }
+}
+
+// Vérifier l'authentification au chargement
+onMounted(() => {
+  fetchProjects()
+})
 
 const getStatusColor = (status: string) => {
   return status === 'upcoming' 
@@ -46,181 +96,111 @@ const getStatusIcon = (status: string) => {
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
+  return date.toLocaleDateString('fr-FR', {
     day: 'numeric',
+    month: 'short',
+    year: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    hour12: false
   })
-}
-
-const createNewWebinar = () => {
-  // Generate a new webinar ID and navigate to studio
-  const newId = Date.now()
-  // In a real app, this would create a new webinar record
-  console.log('Creating new webinar:', newId)
 }
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-50">
-    <Header />
+    <!-- En-tête -->
+<header class="fixed top-0 left-0 right-0 bg-white shadow-sm z-10">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between h-16">
+      <div class="flex-shrink-0 flex items-center">
+        <h1 class="text-xl font-bold text-gray-900">ClipLive</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <button 
+          @click="handleSignOut"
+          class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+        >
+          Déconnexion
+        </button>
+        <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+          <span class="text-sm font-medium text-gray-700">{{ user?.email?.charAt(0).toUpperCase() }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
     
     <main class="pt-24 pb-16">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header -->
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
           <div>
-            <h1 class="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-            <p class="text-gray-600">Manage your webinars and recordings</p>
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Mes projets</h1>
+            <p class="text-gray-600">Gérez vos projets et enregistrements</p>
           </div>
           <RouterLink 
-            to="/studio/new"
-            class="btn-primary flex items-center space-x-2 mt-4 sm:mt-0"
+            @click="createNewProject"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            <Plus class="w-5 h-5" />
-            <span>New Webinar</span>
+            <Plus class="w-5 h-5 mr-2" />
+            <span>Nouveau projet</span>
           </RouterLink>
         </div>
 
-        <!-- Stats -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div class="card">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm text-gray-600 mb-1">Total Webinars</p>
-                <p class="text-2xl font-bold text-gray-900">{{ webinars.length }}</p>
-              </div>
-              <div class="p-3 bg-primary-50 rounded-xl">
-                <Video class="w-6 h-6 text-primary-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div class="card">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm text-gray-600 mb-1">Total Attendees</p>
-                <p class="text-2xl font-bold text-gray-900">262</p>
-              </div>
-              <div class="p-3 bg-secondary-50 rounded-xl">
-                <Users class="w-6 h-6 text-secondary-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div class="card">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm text-gray-600 mb-1">Upcoming</p>
-                <p class="text-2xl font-bold text-gray-900">1</p>
-              </div>
-              <div class="p-3 bg-accent-50 rounded-xl">
-                <Calendar class="w-6 h-6 text-accent-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div class="card">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm text-gray-600 mb-1">Total Hours</p>
-                <p class="text-2xl font-bold text-gray-900">3h 47m</p>
-              </div>
-              <div class="p-3 bg-warning-50 rounded-xl">
-                <Clock class="w-6 h-6 text-warning-600" />
-              </div>
-            </div>
-          </div>
+        <!-- Chargement -->
+        <div v-if="loading" class="flex justify-center py-12">
+          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
         </div>
 
-        <!-- Webinars List -->
-        <div class="card">
-          <div class="flex items-center justify-between mb-6">
-            <h2 class="text-xl font-semibold text-gray-900">Your Webinars</h2>
-            <div class="flex items-center space-x-2">
-              <button class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors duration-200">
-                All
-              </button>
-              <button class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors duration-200">
-                Upcoming
-              </button>
-              <button class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors duration-200">
-                Ended
-              </button>
-            </div>
+        <!-- Message si pas de projets -->
+        <div v-else-if="projects.length === 0" class="text-center py-12">
+          <div class="mx-auto w-24 h-24 text-gray-300 mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
           </div>
+          <h3 class="text-lg font-medium text-gray-900 mb-1">Aucun projet</h3>
+          <p class="text-gray-500 mb-6">Commencez par créer votre premier projet</p>
+          <button
+            @click="createNewProject"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <Plus class="w-5 h-5 mr-2" />
+            Nouveau projet
+          </button>
+        </div>
 
-          <div class="space-y-4">
-            <div
-              v-for="webinar in webinars"
-              :key="webinar.id"
-              class="flex flex-col lg:flex-row lg:items-center justify-between p-4 border border-gray-200 rounded-2xl hover:shadow-md transition-all duration-200"
-            >
-              <div class="flex items-start space-x-4">
-                <img
-                  :src="webinar.thumbnail"
-                  :alt="webinar.title"
-                  class="w-20 h-12 object-cover rounded-xl"
-                />
-                <div class="flex-1">
-                  <div class="flex items-center space-x-3 mb-2">
-                    <h3 class="font-semibold text-gray-900">{{ webinar.title }}</h3>
-                    <span
-                      class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium border"
-                      :class="getStatusColor(webinar.status)"
-                    >
-                      <component :is="getStatusIcon(webinar.status)" class="w-3 h-3 mr-1" />
-                      {{ webinar.status === 'upcoming' ? 'Upcoming' : 'Ended' }}
-                    </span>
-                  </div>
-                  <div class="flex items-center space-x-4 text-sm text-gray-600">
-                    <span class="flex items-center space-x-1">
-                      <Calendar class="w-4 h-4" />
-                      <span>{{ formatDate(webinar.date) }}</span>
-                    </span>
-                    <span v-if="webinar.duration" class="flex items-center space-x-1">
-                      <Clock class="w-4 h-4" />
-                      <span>{{ webinar.duration }}</span>
-                    </span>
-                    <span class="flex items-center space-x-1">
-                      <Users class="w-4 h-4" />
-                      <span>{{ webinar.attendees }} attendees</span>
-                    </span>
-                  </div>
-                </div>
+        <!-- Liste des projets -->
+        <div v-if="projects.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div 
+            v-for="project in projects" 
+            :key="project.id"
+            class="bg-white rounded-xl shadow overflow-hidden hover:shadow-lg transition-shadow duration-200 border border-gray-100"
+          >
+            <div class="h-32 bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center">
+              <Video class="w-12 h-12 text-white opacity-90" />
+            </div>
+            <div class="p-5">
+              <div class="flex justify-between items-start">
+                <h3 class="text-lg font-semibold text-gray-900 truncate">{{ project.title }}</h3>
               </div>
-
-              <div class="flex items-center space-x-2 mt-4 lg:mt-0">
-                <template v-if="webinar.status === 'upcoming'">
-                  <RouterLink
-                    :to="`/studio/${webinar.id}`"
-                    class="flex items-center space-x-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors duration-200"
-                  >
-                    <Settings class="w-4 h-4" />
-                    <span>Open Studio</span>
-                  </RouterLink>
-                </template>
-                <template v-else>
-                  <RouterLink
-                    :to="`/replay/${webinar.id}`"
-                    class="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-colors duration-200"
-                  >
-                    <Play class="w-4 h-4" />
-                    <span>Replay</span>
-                  </RouterLink>
-                  <RouterLink
-                    :to="`/editor/${webinar.id}`"
-                    class="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-colors duration-200"
-                  >
-                    <Edit3 class="w-4 h-4" />
-                    <span>Edit</span>
-                  </RouterLink>
-                  <button class="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-colors duration-200">
-                    <Download class="w-4 h-4" />
-                    <span>Export</span>
-                  </button>
-                </template>
+              <div class="mt-2 text-sm text-gray-500">
+                Créé le {{ formatDate(project.created_at) }}
+              </div>
+              <div class="mt-4 flex space-x-2">
+                <RouterLink
+                  :to="`/studio/${project.id}`"
+                  class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <Edit3 class="w-4 h-4 mr-2" />
+                  Modifier
+                </RouterLink>
+                <button
+                  class="inline-flex items-center p-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <Play class="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>

@@ -11,12 +11,14 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run server\""
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "livekit-client": "^2.4.0",
     "livekit-server-sdk": "^2.13.0",
     "lucide-vue-next": "^0.294.0",
+    "pinia": "^3.0.3",
     "vue": "^3.4.38",
     "vue-router": "^4.2.5"
   },
