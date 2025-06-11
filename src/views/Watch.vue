@@ -154,7 +154,7 @@ const connectToRoom = async () => {
   // Générer un token côté client
   let token;
   try {
-    const response = await fetch('http://localhost:3001/api/token', {
+    const response = await fetch('http://192.168.1.213:3001/api/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
