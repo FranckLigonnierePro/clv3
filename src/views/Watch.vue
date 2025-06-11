@@ -142,12 +142,39 @@ const cleanup = async () => {
 
 // Connexion à la room
 const connectToRoom = async () => {
-  const { room: roomParam, token } = route.query;
+  const { room: roomParam } = route.query;
   
-  if (!roomParam || !token) {
-    const errorMsg = 'Paramètres de salle manquants. Vérifiez l\'URL.';
+  if (!roomParam) {
+    const errorMsg = 'Nom de salle manquant dans l\'URL.';
     console.error(errorMsg);
     error.value = errorMsg;
+    return;
+  }
+  
+  // Générer un token côté client
+  let token;
+  try {
+    const response = await fetch('http://localhost:3001/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        roomName: roomParam,
+        participantName: `viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `Erreur HTTP ${response.status} lors de la génération du token`);
+    }
+    
+    const result = await response.json();
+    token = result.token;
+  } catch (err) {
+    console.error('Erreur lors de la génération du token:', err);
+    error.value = 'Erreur lors de la connexion au serveur';
     return;
   }
   
@@ -251,6 +278,15 @@ const connectToRoom = async () => {
       autoSubscribe: true,
       maxRetries: 3,
       timeout: 10000,
+      // Désactiver le stockage local pour éviter les conflits entre onglets
+      storage: {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+        clear: () => {}
+      },
+      // Ajouter un identifiant unique pour chaque participant
+      participantIdentity: `viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       rtcConfig: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },

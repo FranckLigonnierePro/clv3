@@ -37,13 +37,25 @@ const generateRoomName = () => `salle-${Math.random().toString(36).substring(2, 
 const roomName = ref('')
 const livekitToken = ref('')
 const isPublishing = ref(false)
-const shareUrl = ref('')
+const shareUrl = ref('') // Généré sous la forme `${window.location.origin}/#/watch?room=${roomName.value}&token=${livekitToken.value}`
 const livekitError = ref('')
-const isLinkCopied = ref(false)
-const copyButtonText = ref('Copier le lien')
+const showCopiedNotification = ref(false)
 const livekitRoom = ref<any>(null) // Room | null
 // const livekitRoom = ref<Room | null>(null) // décommente après install
+const isLive = ref(false)
+const participantCount = ref(1) // Commence à 1 pour le streamer
 const canvasComponentRef = ref<any>(null)
+
+// Copier le lien de partage dans le presse-papier
+const copyShareLink = () => {
+  if (shareUrl.value) {
+    navigator.clipboard.writeText(shareUrl.value)
+    showCopiedNotification.value = true
+    setTimeout(() => {
+      showCopiedNotification.value = false
+    }, 3000)
+  }
+}
 
 // Fonction pour démarrer la diffusion LiveKit
 const startLiveKit = async () => {
@@ -58,6 +70,28 @@ const startLiveKit = async () => {
   try {
     // 1. Obtenir un token du serveur
     console.log('Tentative de génération du token...');
+
+    // ... (code pour obtenir le token et se connecter à la room)
+    // Après la connexion à la room LiveKit, publier le flux vidéo du canvas
+    await nextTick(); // s'assurer que le canvas est monté
+    const canvas = canvasComponentRef.value?.getCanvas();
+    if (!canvas) {
+      console.error('[LIVEKIT] Canvas non trouvé, impossible de publier le flux');
+    } else {
+      const stream = canvas.captureStream(30); // 30 FPS
+      const [videoTrack] = stream.getVideoTracks();
+      if (!videoTrack) {
+        console.error('[LIVEKIT] Aucune piste vidéo trouvée dans le flux du canvas');
+      } else {
+        try {
+          const livekitVideoTrack = new LocalVideoTrack(videoTrack);
+          await livekitRoom.value.localParticipant.publishTrack(livekitVideoTrack);
+          console.log('[LIVEKIT] Flux vidéo du canvas publié avec succès');
+        } catch (err) {
+          console.error('[LIVEKIT] Erreur lors de la publication du flux vidéo du canvas :', err);
+        }
+      }
+    }
     const response = await fetch('http://localhost:3001/api/token', {
       method: 'POST',
       headers: {
@@ -65,7 +99,7 @@ const startLiveKit = async () => {
       },
       body: JSON.stringify({
         roomName: roomName.value,
-        participantName: `host-${Date.now()}`
+        participantName: `viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       })
     });
     
@@ -105,6 +139,15 @@ const startLiveKit = async () => {
       }
     });
     
+    // Mettre à jour le nombre de participants
+    const updateParticipantCount = () => {
+      if (!room) return
+      // Compter les participants connectés (exclure le streamer local)
+      const participants = Array.from(room.participants.values())
+      participantCount.value = 1 + participants.length // +1 pour le streamer
+      console.log('Nombre de participants:', participantCount.value)
+    }
+    
     // Gérer les événements de la room
     room
       .on(RoomEvent.Disconnected, () => {
@@ -112,7 +155,18 @@ const startLiveKit = async () => {
         stopLiveKit();
       })
       .on(RoomEvent.Reconnecting, () => console.log('Reconnexion...'))
-      .on(RoomEvent.Reconnected, () => console.log('Reconnecté'));
+      .on(RoomEvent.Reconnected, () => {
+        console.log('Reconnecté')
+        updateParticipantCount()
+      })
+      .on(RoomEvent.ParticipantConnected, () => {
+        console.log('Nouveau participant connecté')
+        updateParticipantCount()
+      })
+      .on(RoomEvent.ParticipantDisconnected, () => {
+        console.log('Participant déconnecté')
+        updateParticipantCount()
+      });
     
     try {
       await room.connect(url, token, {
@@ -141,22 +195,11 @@ const startLiveKit = async () => {
       
       // Fonction pour dessiner le contenu du canvas
       const drawCanvas = () => {
-        // Effacer le canvas
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Ne pas effacer le contenu existant du canvas
+        // pour permettre au rendu original de rester visible
         
-        // Dessiner le fond (noir par défaut)
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Si un fond personnalisé est défini, le dessiner par-dessus
-        if (currentBackground.value) {
-          try {
-            ctx.drawImage(currentBackground.value, 0, 0, canvas.width, canvas.height);
-          } catch (e) {
-            console.error('Erreur lors du dessin du fond:', e);
-          }
-        }
+        // Si vous voulez ajouter des éléments supplémentaires au flux live,
+        // vous pouvez les ajouter ici, mais sans effacer le contenu existant
         
         // Dessiner les éléments de la scène
         const elements = currentElements.value || [];
@@ -204,14 +247,14 @@ const startLiveKit = async () => {
           ctx.restore();
         });
         
-        // Mettre à jour l'horodatage
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(10, canvas.height - 40, 200, 30);
-        ctx.fillStyle = 'white';
-        ctx.font = '16px Arial';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(new Date().toLocaleTimeString(), 20, canvas.height - 25);
+        // Horodatage désactivé
+        // ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        // ctx.fillRect(10, canvas.height - 40, 200, 30);
+        // ctx.fillStyle = 'white';
+        // ctx.font = '16px Arial';
+        // ctx.textAlign = 'left';
+        // ctx.textBaseline = 'middle';
+        // ctx.fillText(new Date().toLocaleTimeString(), 20, canvas.height - 25);
         
         // Planifier la prochaine mise à jour
         animationId = requestAnimationFrame(drawCanvas);
@@ -327,7 +370,7 @@ const startLiveKit = async () => {
     await captureAndPublishCanvas();
     
     // 5. Générer l'URL de partage pour les spectateurs
-    shareUrl.value = `${window.location.origin}/watch?room=${roomName.value}&token=${token}`;
+    shareUrl.value = `${window.location.origin}/watch?room=${roomName.value}`;
     
     // Gérer les événements de la room
     room.on('disconnected', () => {
@@ -370,8 +413,6 @@ const exportResolutions = [
 ]
 
 // Studio state
-const isLive = ref(false)
-const isRecording = ref(false)
 const mediaRecorder = ref<MediaRecorder | null>(null)
 const recordedChunks = ref<Blob[]>([])
 const downloadLink = ref<HTMLAnchorElement | null>(null)
@@ -598,14 +639,7 @@ const handleToggleLive = async () => {
       await startLiveKit();
       isLive.value = true;
       
-      // Lock all elements when going live
-      if (Array.isArray(currentElements.value)) {
-        currentElements.value.forEach(el => {
-          if (el) el.locked = true;
-        });
-      }
-      allElementsLocked.value = true;
-      selectedElement.value = null;
+
     } catch (error) {
       console.error('Erreur lors du démarrage du live:', error);
       livekitError.value = 'Erreur lors du démarrage du live';
@@ -1054,19 +1088,41 @@ onMounted(() => {
                 </div>
               </div>
 
-              <!-- Bouton Live -->
-              <button
-                @click="handleToggleLive"
-                :class="[
-                  'flex items-center px-4 py-2 rounded-full font-medium transition-colors',
-                  isLive 
-                    ? 'bg-red-600 hover:bg-red-700 text-white' 
-                    : 'bg-white hover:bg-gray-200 text-gray-900'
-                ]"
-              >
-                <span class="w-3 h-3 rounded-full bg-current mr-2"></span>
-                {{ isLive ? 'EN DIRECT' : 'GO LIVE' }}
-              </button>
+              <!-- Bouton Live et partage -->
+              <div class="flex items-center space-x-2">
+                <!-- Bouton Live -->
+                <button
+                  @click="handleToggleLive"
+                  :class="[
+                    'flex items-center px-4 py-2 rounded-full font-medium transition-colors',
+                    isLive 
+                      ? 'bg-red-600 hover:bg-red-700 text-white' 
+                      : 'bg-white hover:bg-gray-200 text-gray-900'
+                  ]"
+                >
+                  <span class="w-3 h-3 rounded-full bg-current mr-2"></span>
+                  {{ isLive ? 'EN DIRECT' : 'GO LIVE' }}
+                </button>
+
+                <!-- Bouton de partage (visible uniquement en mode live) -->
+                <div v-if="isLive" class="relative">
+                  <button
+                    @click="copyShareLink"
+                    class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full font-medium transition-colors"
+                  >
+                    <Link :size="16" />
+                    <span>Partager</span>
+                  </button>
+                  
+                  <!-- Notification de copie -->
+                  <div 
+                    v-if="showCopiedNotification"
+                    class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-3 py-1 rounded-md text-sm whitespace-nowrap"
+                  >
+                    Lien copié !
+                  </div>
+                </div>
+              </div>
 
               <!-- Snap Toggle -->
               <div class="flex items-center">
@@ -1096,9 +1152,18 @@ onMounted(() => {
               </button>
             </div>
 
-            <!-- Element Count -->
-            <div class="text-sm text-gray-400">
-              {{ currentElements.length }} elements
+            <!-- Element Count and Participants -->
+            <div class="flex items-center space-x-4">
+              <div class="text-sm text-gray-400">
+                {{ currentElements.length }} éléments
+              </div>
+              <div v-if="isLive" class="flex items-center text-sm text-green-400">
+                <span class="relative flex h-2 w-2 mr-1">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                {{ participantCount }} {{ participantCount > 1 ? 'spectateurs' : 'spectateur' }}
+              </div>
             </div>
           </div>
         </div>
@@ -1106,17 +1171,17 @@ onMounted(() => {
         <!-- Canvas -->
         <div class="flex-1 p-6 bg-gray-900">
           <Canvas
-             ref="canvasComponentRef"
-             :elements="currentElements"
-             :format="canvasFormat"
-             :show-grid="showGrid"
-             :snap-enabled="snapEnabled"
-             :is-live="isLive"
-             :selected-element="selectedElement"
-             @element-select="handleElementSelect"
-             @element-update="handleElementUpdate"
-             @element-delete="handleElementDelete"
-           />
+            ref="canvasComponentRef"
+            :elements="currentElements"
+            :format="canvasFormat"
+            :show-grid="showGrid"
+            :snap-enabled="snapEnabled"
+            :is-live="isLive"
+            :selected-element="selectedElement"
+            @element-select="handleElementSelect"
+            @element-update="handleElementUpdate"
+            @element-delete="handleElementDelete"
+          />
 
            <!-- Bouton de partage Live -->
            <div class="mt-6 flex justify-center">
