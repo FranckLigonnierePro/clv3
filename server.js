@@ -1,12 +1,28 @@
-import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import { AccessToken } from 'livekit-server-sdk';
 
-dotenv.config();
+// Charger les variables d'environnement depuis .env.server
+import { config } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Charger spécifiquement le fichier .env.server
+config({ path: resolve(__dirname, '.env.server') });
 
 const app = express();
 const port = process.env.PORT || 3001;
+
+// Afficher les variables d'environnement chargées (pour le débogage)
+console.log('Configuration LiveKit chargée:', {
+  LIVEKIT_URL: process.env.LIVEKIT_URL,
+  PORT: process.env.PORT,
+  LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY ? '***' + process.env.LIVEKIT_API_KEY.slice(-4) : 'non défini',
+  LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET ? '***' + process.env.LIVEKIT_API_SECRET.slice(-4) : 'non défini'
+});
 
 // Middleware
 app.use(cors());
@@ -15,6 +31,14 @@ app.use(express.json());
 // Générer un token LiveKit
 app.post('/api/token', async (req, res) => {
   try {
+    console.log('Requête reçue sur /api/token avec le corps:', req.body);
+    console.log('Variables d\'environnement chargées:', {
+      LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY ? '***' + process.env.LIVEKIT_API_KEY.slice(-4) : 'non défini',
+      LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET ? '***' + process.env.LIVEKIT_API_SECRET.slice(-4) : 'non défini',
+      LIVEKIT_URL: process.env.LIVEKIT_URL || 'non défini',
+      PORT: process.env.PORT || 'non défini'
+    });
+
     const { roomName, participantName } = req.body;
     
     if (!roomName || !participantName) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, watch, onMounted } from 'vue'
+import { useRoute, RouterView } from 'vue-router'
 import AppNavbar from '@/components/layout/AppNavbar.vue'
 
 const route = useRoute()
@@ -16,23 +16,36 @@ watch(
   },
   { immediate: true }
 )
+
+// Debug: Vérifier quand le composant est monté et les propriétés
+onMounted(() => {
+  console.log('MainLayout monté')
+  console.log('Route actuelle:', route.path)
+  console.log('showNavbar:', showNavbar.value)
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col">
+  <div class="min-h-screen bg-gray-100 flex flex-col">
     <!-- Barre de navigation -->
     <AppNavbar v-if="showNavbar" />
     
     <!-- Contenu principal -->
-    <main class="flex-grow">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <slot></slot>
+    <main class="flex-1 p-4">
+      <div class="max-w-7xl mx-auto w-full">
+        <!-- Debug: Afficher le nom de la route actuelle -->
+        <div v-if="false" class="bg-yellow-100 p-2 mb-4 rounded text-sm">
+          Route: {{ $route.path }}
+        </div>
+        
+        <!-- RouterView pour le rendu des vues imbriquées -->
+        <RouterView />
       </div>
     </main>
     
     <!-- Pied de page -->
-    <footer v-if="showNavbar" class="bg-white border-t border-gray-200 mt-12">
-      <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <footer v-if="showNavbar" class="bg-white border-t border-gray-200 mt-8">
+      <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div class="md:flex md:items-center md:justify-between">
           <div class="flex justify-center md:justify-start space-x-6">
             <a href="#" class="text-gray-400 hover:text-gray-500">
@@ -48,8 +61,8 @@ watch(
               </svg>
             </a>
           </div>
-          <div class="mt-8 md:mt-0">
-            <p class="text-center text-base text-gray-400">
+          <div class="mt-4 md:mt-0">
+            <p class="text-center text-sm text-gray-500">
               &copy; {{ new Date().getFullYear() }} ClipLive. Tous droits réservés.
             </p>
           </div>
@@ -58,3 +71,7 @@ watch(
     </footer>
   </div>
 </template>
+
+<style scoped>
+/* Styles spécifiques au layout */
+</style>

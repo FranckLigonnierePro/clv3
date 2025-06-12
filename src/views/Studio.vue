@@ -70,28 +70,8 @@ const startLiveKit = async () => {
   try {
     // 1. Obtenir un token du serveur
     console.log('Tentative de génération du token...');
-
-    // ... (code pour obtenir le token et se connecter à la room)
-    // Après la connexion à la room LiveKit, publier le flux vidéo du canvas
-    await nextTick(); // s'assurer que le canvas est monté
-    const canvas = canvasComponentRef.value?.getCanvas();
-    if (!canvas) {
-      console.error('[LIVEKIT] Canvas non trouvé, impossible de publier le flux');
-    } else {
-      const stream = canvas.captureStream(30); // 30 FPS
-      const [videoTrack] = stream.getVideoTracks();
-      if (!videoTrack) {
-        console.error('[LIVEKIT] Aucune piste vidéo trouvée dans le flux du canvas');
-      } else {
-        try {
-          const livekitVideoTrack = new LocalVideoTrack(videoTrack);
-          await livekitRoom.value.localParticipant.publishTrack(livekitVideoTrack);
-          console.log('[LIVEKIT] Flux vidéo du canvas publié avec succès');
-        } catch (err) {
-          console.error('[LIVEKIT] Erreur lors de la publication du flux vidéo du canvas :', err);
-        }
-      }
-    }
+    
+    // 2. Obtenir le token du serveur
     const response = await fetch('http://localhost:3001/api/token', {
       method: 'POST',
       headers: {
@@ -99,7 +79,7 @@ const startLiveKit = async () => {
       },
       body: JSON.stringify({
         roomName: roomName.value,
-        participantName: `viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        participantName: `host-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       })
     });
     
@@ -115,14 +95,10 @@ const startLiveKit = async () => {
     });
     
     const { token, url } = result;
-    console.log('Token reçu, connexion à la room...', { 
-      url,
-      token: token ? '***' + token.slice(-10) : 'manquant'
-    });
+    livekitToken.value = token;
     
-    // 2. Se connecter à la room LiveKit
-    const { Room, RoomEvent } = await import('livekit-client');
-    const room = new Room({
+    // 3. Initialiser la connexion à la salle LiveKit
+    livekitRoom.value = new Room({
       // Activer l'audio et la vidéo automatiquement
       adaptiveStream: true,
       dynacast: true,
@@ -139,47 +115,65 @@ const startLiveKit = async () => {
       }
     });
     
-    // Mettre à jour le nombre de participants
-    const updateParticipantCount = () => {
-      if (!room) return
-      // Compter les participants connectés (exclure le streamer local)
-      const participants = Array.from(room.participants.values())
-      participantCount.value = 1 + participants.length // +1 pour le streamer
-      console.log('Nombre de participants:', participantCount.value)
+    console.log('Connexion à la salle LiveKit...', { 
+      url: result.url,
+      token: result.token ? '***' + result.token.slice(-10) : 'manquant'
+    });
+    
+    // 4. Se connecter à la salle
+    await livekitRoom.value.connect(result.url, result.token);
+    console.log('[LIVEKIT] Connecté à la salle avec succès');
+    
+    // 5. Une fois connecté, publier le flux vidéo du canvas
+    await nextTick(); // s'assurer que le canvas est monté
+    const canvas = canvasComponentRef.value?.getCanvas();
+    if (!canvas) {
+      console.error('[LIVEKIT] Canvas non trouvé, impossible de publier le flux');
+    } else {
+      const stream = canvas.captureStream(30); // 30 FPS
+      const [videoTrack] = stream.getVideoTracks();
+      if (!videoTrack) {
+        console.error('[LIVEKIT] Aucune piste vidéo trouvée dans le flux du canvas');
+      } else {
+        try {
+          const livekitVideoTrack = new LocalVideoTrack(videoTrack);
+          await livekitRoom.value.localParticipant.publishTrack(livekitVideoTrack);
+          console.log('[LIVEKIT] Flux vidéo du canvas publié avec succès');
+          
+          // 6. Mettre à jour l'URL de partage
+          shareUrl.value = `${window.location.origin}/#/watch?room=${roomName.value}&token=${result.token}`;
+          console.log('URL de partage générée:', shareUrl.value);
+        } catch (err) {
+          console.error('[LIVEKIT] Erreur lors de la publication du flux vidéo du canvas :', err);
+          throw err; // Propage l'erreur pour qu'elle soit gérée par le bloc catch externe
+        }
+      }
     }
     
     // Gérer les événements de la room
-    room
-      .on(RoomEvent.Disconnected, () => {
+    livekitRoom.value
+      .on('disconnected', () => {
         console.log('Déconnecté de la room');
         stopLiveKit();
       })
-      .on(RoomEvent.Reconnecting, () => console.log('Reconnexion...'))
-      .on(RoomEvent.Reconnected, () => {
-        console.log('Reconnecté')
-        updateParticipantCount()
+      .on('reconnecting', () => console.log('Reconnexion...'))
+      .on('reconnected', () => {
+        console.log('Reconnecté');
+        updateParticipantCount();
       })
-      .on(RoomEvent.ParticipantConnected, () => {
-        console.log('Nouveau participant connecté')
-        updateParticipantCount()
+      .on('participantConnected', () => {
+        console.log('Nouveau participant connecté');
+        updateParticipantCount();
       })
-      .on(RoomEvent.ParticipantDisconnected, () => {
-        console.log('Participant déconnecté')
-        updateParticipantCount()
+      .on('participantDisconnected', () => {
+        console.log('Participant déconnecté');
+        updateParticipantCount();
       });
     
-    try {
-      await room.connect(url, token, {
-        autoSubscribe: true,
-      });
-      livekitRoom.value = room;
-      console.log('Connecté à la room:', room.name);
-    } catch (error) {
-      console.error('Erreur de connexion à la room:', error);
-      throw error;
-    }
+    // Mettre à jour le nombre de participants initial
+    updateParticipantCount();
     
-        // Référence pour l'animation
+    // Référence pour l'animation
     let animationId = null;
     
     // 3. Capturer et diffuser le contenu du canvas

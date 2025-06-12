@@ -38,17 +38,44 @@ const handleLogout = async () => {
 }
 
 const navItems = [
-  { name: 'Accueil', path: '/dashboard', icon: Home },
-  { name: 'Nouveau projet', path: '/studio', icon: Plus },
-  { name: 'Mes vidéos', path: '/videos', icon: Video },
-  { name: 'Rechercher', path: '/search', icon: Search },
+  { 
+    name: 'Accueil', 
+    to: { name: 'dashboard' }, 
+    icon: Home,
+    activeRoutes: ['dashboard']
+  },
+  { 
+    name: 'Nouveau projet', 
+    to: { name: 'studio', params: { id: 'new' } }, 
+    icon: Plus,
+    activeRoutes: ['studio']
+  },
+  { 
+    name: 'Mes vidéos', 
+    to: { name: 'dashboard' }, 
+    icon: Video,
+    activeRoutes: ['dashboard']
+  },
+  // { 
+  //   name: 'Rechercher', 
+  //   to: { name: 'search' }, 
+  //   icon: Search,
+  //   activeRoutes: ['search']
+  // } // Uncomment when search is implemented
 ]
 
 const userMenuItems = [
-  { name: 'Profil', path: '/profile', icon: User },
-  { name: 'Paramètres', path: '/settings', icon: Settings },
+  { name: 'Profil', to: { name: 'profile' }, icon: User },
+  { name: 'Paramètres', to: { name: 'settings' }, icon: Settings },
   { name: 'Déconnexion', action: handleLogout, icon: LogOut },
 ]
+
+// Vérifier si un élément de menu est actif
+const isActive = (item: { activeRoutes?: string[] }) => {
+  if (!item.activeRoutes) return false
+  const currentRouteName = router.currentRoute.value.name?.toString()
+  return currentRouteName ? item.activeRoutes.includes(currentRouteName) : false
+}
 </script>
 
 <template>
@@ -68,13 +95,14 @@ const userMenuItems = [
             <router-link
               v-for="item in navItems"
               :key="item.name"
-              :to="item.path"
+              :to="item.to"
               class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
               :class="{
-                'border-indigo-500 text-gray-900': $route.path.startsWith(item.path) && item.path !== '/',
-                'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700': !$route.path.startsWith(item.path) || item.path === '/',
+                'border-indigo-500 text-gray-900': isActive(item),
+                'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700': !isActive(item),
                 'ml-4': item.name !== 'Accueil'
               }"
+              @click="isMobileMenuOpen = false"
             >
               <component :is="item.icon" class="mr-2 h-5 w-5" />
               {{ item.name }}
@@ -121,20 +149,23 @@ const userMenuItems = [
                 <template v-for="item in userMenuItems" :key="item.name">
                   <router-link
                     v-if="!item.action"
-                    :to="item.path"
-                    class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    :to="item.to"
+                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     role="menuitem"
+                    @click="isMobileMenuOpen = false"
                   >
-                    <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-400" />
-                    {{ item.name }}
+                    <div class="flex items-center">
+                      <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-500" />
+                      {{ item.name }}
+                    </div>
                   </router-link>
                   <button
                     v-else
-                    @click="item.action"
                     class="w-full text-left flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     role="menuitem"
+                    @click="item.action()"
                   >
-                    <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-400" />
+                    <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-500" />
                     {{ item.name }}
                   </button>
                 </template>

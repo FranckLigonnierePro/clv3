@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { onAuthStateChange, type AuthSession } from './supabase'
 import { useAuthStore } from '@/stores/auth'
+import { useNotifications } from '@/stores/notifications'
+import Notification from '@/components/ui/Notification.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -16,74 +18,117 @@ const publicPaths = [
   '/register',
   '/forgot-password',
   '/reset-password',
+  '/auth',
   '/auth/login',
   '/auth/register',
   '/auth/forgot-password',
-  '/auth/reset-password'
+  '/auth/reset-password',
+  '/auth/verify',
+  '/404',
+  '/unauthorized'
 ]
 
-// Vérifier si la route actuelle est publique
-const isPublicPath = (path: string) => {
+/**
+ * Vérifie si un chemin est public (ne nécessite pas d'authentification)
+ */
+const isPublicPath = (path: string): boolean => {
+  // Nettoyer le chemin pour enlever les paramètres de requête et les fragments
+  const cleanPath = path.split('?')[0].split('#')[0]
+  
+  // Vérifier si le chemin correspond exactement ou commence par un chemin public
   return publicPaths.some(publicPath => 
-    path === publicPath || path.startsWith(`${publicPath}/`)
+    cleanPath === publicPath || 
+    cleanPath.startsWith(`${publicPath}/`)
   )
 }
 
-// Initialiser l'authentification
+/**
+ * Initialise l'authentification et gère les redirections initiales
+ */
 const initAuth = async () => {
   try {
+    // Initialiser le store d'authentification
     await authStore.init()
     
-    // Rediriger si nécessaire après l'initialisation
-    if (authStore.isAuthenticated && isPublicPath(route.path)) {
-      // Si l'utilisateur est connecté et sur une page publique, rediriger vers le tableau de bord
-      const redirectPath = route.query.redirect as string || '/dashboard'
-      router.push(redirectPath)
-    } else if (!authStore.isAuthenticated && !isPublicPath(route.path)) {
-      // Si l'utilisateur n'est pas connecté et tente d'accéder à une page protégée
+    // Si l'utilisateur est connecté
+    if (authStore.isAuthenticated) {
+      // Rediriger depuis les pages d'authentification vers le tableau de bord
+      if (isPublicPath(route.path) && route.path !== '/') {
+        const redirectPath = route.query.redirect as string || '/app/dashboard'
+        router.push(redirectPath)
+      }
+    } 
+    // Si l'utilisateur n'est pas connecté et tente d'accéder à une page protégée
+    else if (!isPublicPath(route.path)) {
+      const redirectPath = route.fullPath === '/' ? undefined : route.fullPath
       router.push({ 
-        path: '/login',
-        query: { redirect: route.fullPath }
+        name: 'login',
+        query: redirectPath ? { redirect: redirectPath } : undefined
       })
     }
   } catch (error) {
-    console.error('Authentication initialization error:', error)
+    console.error('Erreur lors de l\'initialisation de l\'authentification:', error)
+    // En cas d'erreur, rediriger vers la page de connexion
+    if (!isPublicPath(route.path)) {
+      router.push({ name: 'login' })
+    }
   } finally {
     isLoading.value = false
   }
 }
 
-// Écouter les changements d'authentification
+/**
+ * Configure l'écouteur d'événements d'authentification
+ */
 const setupAuthListener = () => {
   const { data: { subscription } } = onAuthStateChange(async (event, session) => {
-    console.log('Auth state changed:', event, session)
+    console.log('Changement d\'état d\'authentification:', event)
     
-    // Mettre à jour le store avec les nouvelles informations de session
-    authStore.updateSession(session)
-    
-    if (event === 'SIGNED_IN') {
-      // Mettre à jour l'utilisateur après une connexion réussie
-      const { data } = await authStore.init()
+    try {
+      // Mettre à jour la session dans le store
+      authStore.updateSession(session)
       
-      // Rediriger si nécessaire
-      if (isPublicPath(route.path)) {
-        const redirectPath = route.query.redirect as string || '/dashboard'
-        router.push(redirectPath)
+      // Gérer les différents événements d'authentification
+      switch (event) {
+        case 'SIGNED_IN':
+          // Mettre à jour l'utilisateur après une connexion réussie
+          await authStore.init()
+          
+          // Rediriger depuis les pages d'authentification vers le tableau de bord
+          if (isPublicPath(route.path) && route.path !== '/') {
+            const redirectPath = route.query.redirect as string || '/app/dashboard'
+            router.push(redirectPath)
+          }
+          break
+          
+        case 'SIGNED_OUT':
+          // Rediriger vers la page de connexion si sur une page protégée
+          if (!isPublicPath(route.path)) {
+            router.push({ 
+              name: 'login',
+              query: { redirect: route.fullPath }
+            })
+          }
+          break
+          
+        case 'TOKEN_REFRESHED':
+          console.log('Token rafraîchi avec succès')
+          break
+          
+        case 'USER_UPDATED':
+          console.log('Utilisateur mis à jour:', session?.user)
+          break
       }
-    } else if (event === 'SIGNED_OUT') {
-      // Rediriger vers la page de connexion si l'utilisateur est déconnecté
-      // et se trouve sur une page protégée
-      if (!isPublicPath(route.path)) {
-        router.push({ 
-          path: '/login',
-          query: { redirect: route.fullPath }
-        })
-      }
+    } catch (error) {
+      console.error('Erreur lors de la gestion du changement d\'état d\'authentification:', error)
     }
   })
   
+  // Retourner une fonction de nettoyage
   return () => {
-    subscription.unsubscribe()
+    if (subscription) {
+      subscription.unsubscribe()
+    }
   }
 }
 
@@ -106,44 +151,93 @@ onMounted(async () => {
   }
 })
 
-// Surveiller les changements de route pour la protection des routes
+/**
+ * Surveille les changements de route pour la protection des routes
+ */
 watch(
-  () => route.path,
-  async (toPath) => {
+  () => route.fullPath,
+  async (toPath, fromPath) => {
+    // Ignorer si toujours en cours de chargement initial
     if (isLoading.value) return
     
-    const isAuthRequired = !isPublicPath(toPath)
+    // Ignorer si le chemin n'a pas vraiment changé
+    if (toPath === fromPath) return
     
-    if (isAuthRequired && !authStore.isAuthenticated) {
-      // Rediriger vers la page de connexion avec une redirection de retour
-      router.push({
-        path: '/login',
-        query: { redirect: toPath }
-      })
-    } else if (!isAuthRequired && authStore.isAuthenticated && toPath === '/login') {
-      // Rediriger depuis la page de connexion si déjà connecté
-      const redirectPath = route.query.redirect as string || '/dashboard'
-      router.push(redirectPath)
+    // Nettoyer le chemin pour la vérification
+    const cleanPath = toPath.split('?')[0].split('#')[0]
+    const isAuthRequired = !isPublicPath(cleanPath)
+    
+    try {
+      // Si l'authentification est requise mais l'utilisateur n'est pas connecté
+      if (isAuthRequired && !authStore.isAuthenticated) {
+        // Éviter les boucles de redirection
+        if (cleanPath !== '/auth/login' && cleanPath !== '/login') {
+          await router.push({
+            name: 'login',
+            query: { redirect: cleanPath }
+          })
+        }
+      } 
+      // Si l'utilisateur est connecté mais sur une page d'authentification
+      else if (authStore.isAuthenticated && (cleanPath === '/login' || cleanPath === '/auth/login')) {
+        const redirectPath = route.query.redirect as string || '/app/dashboard'
+        await router.push(redirectPath)
+      }
+    } catch (error) {
+      console.error('Erreur lors de la protection de la route:', error)
+      // En cas d'erreur, rediriger vers la page d'accueil
+      if (cleanPath !== '/') {
+        await router.push('/')
+      }
     }
-  }
+  },
+  { immediate: true }
 )
+// Exposer les notifications pour le template
+const notificationsStore = useNotifications()
+const notifications = computed(() => notificationsStore.notifications)
 </script>
 
 <template>
   <div id="app" class="min-h-screen bg-gray-50">
+    <!-- Conteneur de notifications -->
+    <div class="fixed inset-0 z-50 flex flex-col items-end p-4 pointer-events-none">
+      <div class="w-full max-w-sm space-y-2">
+        <TransitionGroup
+          enter-active-class="transform ease-out duration-300 transition"
+          enter-from-class="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
+          enter-to-class="translate-y-0 opacity-100 sm:translate-x-0"
+          leave-active-class="transition ease-in duration-100"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <Notification
+            v-for="notification in notifications"
+            :key="notification.id"
+            :notification="notification"
+            class="pointer-events-auto"
+          />
+        </TransitionGroup>
+      </div>
+    </div>
+
     <!-- Écran de chargement -->
-    <div v-if="isLoading" class="fixed inset-0 flex items-center justify-center bg-white bg-opacity-80 z-50">
+    <div v-if="isLoading" class="fixed inset-0 flex items-center justify-center bg-white bg-opacity-80 z-40">
       <div class="text-center">
         <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
         <p class="mt-4 text-gray-600">Chargement...</p>
       </div>
     </div>
-    
-    <!-- Contenu principal -->
-    <RouterView v-else />
-    
-    <!-- Notifications (à implémenter) -->
-    <div id="notifications" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Contenu principal avec Suspense pour le chargement asynchrone -->
+    <RouterView v-slot="{ Component }">
+      <Suspense>
+        <component :is="Component" v-if="!isLoading" />
+        <div v-else class="flex items-center justify-center min-h-screen">
+          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      </Suspense>
+    </RouterView>
   </div>
 </template>
 

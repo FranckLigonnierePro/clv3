@@ -6,12 +6,7 @@ import { ref } from 'vue'
 const route = useRoute()
 const mobileMenuOpen = ref(false)
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Video },
-  { name: 'Studio', href: '/studio/new', icon: Settings },
-  { name: 'Editor', href: '/editor/demo', icon: Edit3 },
-  { name: 'Replay', href: '/replay/demo', icon: Play },
-]
+const navigation = []
 
 const toggleMobileMenu = () => {
   mobileMenuOpen.value = !mobileMenuOpen.value

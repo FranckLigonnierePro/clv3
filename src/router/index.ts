@@ -29,24 +29,47 @@ import Unauthorized from '@/views/errors/Unauthorized.vue'
 
 // Garde de navigation pour les routes protégées
 const requireAuth = async (to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext) => {
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    // Rediriger vers la page de connexion si l'utilisateur n'est pas connecté
-    next({ name: 'login', query: { redirect: to.fullPath } })
-  } else {
-    next()
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error) throw error
+    
+    if (!user) {
+      // Rediriger vers la page de connexion si l'utilisateur n'est pas connecté
+      next({ 
+        name: 'login', 
+        query: { 
+          redirect: to.fullPath !== '/app/dashboard' ? to.fullPath : undefined 
+        } 
+      })
+    } else {
+      next()
+    }
+  } catch (error) {
+    console.error('Erreur lors de la vérification de l\'authentification:', error)
+    next({ name: 'login' })
   }
 }
 
 // Garde de navigation pour les routes d'authentification (empêche l'accès si déjà connecté)
 const redirectIfAuthenticated = async (to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext) => {
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (user) {
-    next({ name: 'dashboard' })
-  } else {
-    next()
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error) throw error
+    
+    if (user) {
+      // Rediriger vers le tableau de bord si l'utilisateur est déjà connecté
+      next({ 
+        name: 'dashboard',
+        replace: true // Empêche de revenir à la page de connexion avec le bouton retour
+      })
+    } else {
+      next()
+    }
+  } catch (error) {
+    console.error('Erreur lors de la vérification de l\'authentification:', error)
+    next() // Continuer quand même pour ne pas bloquer l'utilisateur
   }
 }
 
@@ -55,9 +78,19 @@ const routes: RouteRecordRaw[] = [
   // Route d'accueil publique
   {
     path: '/',
+    name: 'home',
     component: LandingPage,
-    name: 'landing',
-    meta: { public: true, layout: 'empty' }
+    meta: { title: 'Accueil' },
+    beforeEnter: (to, from, next) => {
+      // Vérifier si l'utilisateur est connecté
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          next({ name: 'dashboard' })
+        } else {
+          next()
+        }
+      })
+    }
   },
   
   // Routes d'authentification
@@ -113,10 +146,15 @@ const routes: RouteRecordRaw[] = [
   
   // Routes protégées avec layout principal
   {
-    path: '/',
+    path: '/app',
     component: MainLayout,
     meta: { requiresAuth: true },
     children: [
+      // Rediriger /app vers /app/dashboard
+      {
+        path: '',
+        redirect: { name: 'dashboard' }
+      },
       {
         path: 'dashboard',
         name: 'dashboard',
@@ -175,8 +213,20 @@ const routes: RouteRecordRaw[] = [
         })
       },
       {
-        path: '/live/:id',
-        redirect: to => `/studio/${to.params.id}`
+        path: 'live/:id',
+        redirect: to => `/app/studio/${to.params.id}`
+      },
+      // Redirection pour les anciennes URL
+      {
+        path: '/studio/:id?',
+        redirect: to => ({
+          name: 'studio',
+          params: { id: to.params.id || 'new' }
+        })
+      },
+      {
+        path: '/dashboard',
+        redirect: { name: 'dashboard' }
       }
     ]
   },
@@ -217,26 +267,72 @@ const router = createRouter({
 
 // Navigation guard globale
 router.beforeEach(async (to, from, next) => {
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  // Définir le titre de la page
-  const title = to.meta.title as string || 'ClipLive'
-  document.title = title === 'ClipLive' ? title : `${title} | ClipLive`
-  
-  // Vérifier l'authentification
-  if (to.matched.some(record => record.meta.requiresAuth)) {
-    if (!user) {
-      // Rediriger vers la page de connexion avec une redirection de retour
+  try {
+    // Définir le titre de la page
+    const title = to.meta.title as string || 'ClipLive'
+    document.title = title === 'ClipLive' ? title : `${title} | ClipLive`
+    
+    // Vérifier si la route est publique ou nécessite une authentification
+    const isPublic = to.meta.public === true
+    const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+    const isAuthRoute = to.matched.some(record => record.path.startsWith('/auth'))
+    
+    // Récupérer l'utilisateur actuel de manière sécurisée
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    if (error) {
+      console.error('Erreur lors de la récupération de l\'utilisateur:', error)
+      // En cas d'erreur, on considère que l'utilisateur n'est pas authentifié
+      if (requiresAuth) {
+        return next({
+          name: 'login',
+          query: { 
+            redirect: to.fullPath !== '/app/dashboard' ? to.fullPath : undefined,
+            error: 'auth_error'
+          }
+        })
+      }
+      return next()
+    }
+    
+    // Si l'utilisateur est sur une route protégée et n'est pas connecté
+    if (requiresAuth && !user) {
       return next({
         name: 'login',
-        query: { redirect: to.fullPath }
+        query: { 
+          redirect: to.fullPath !== '/app/dashboard' ? to.fullPath : undefined,
+          reason: 'auth_required'
+        },
+        replace: true
       })
     }
+    
+    // Si l'utilisateur est connecté et essaie d'accéder à une route d'authentification
+    if (isAuthRoute && user) {
+      return next({ 
+        name: 'dashboard',
+        replace: true
+      })
+    }
+    
+    // Rediriger la racine vers le tableau de bord si l'utilisateur est connecté
+    if (to.path === '/' && user) {
+      return next({ 
+        name: 'dashboard',
+        replace: true
+      })
+    }
+    
+    next()
+  } catch (error) {
+    console.error('Erreur dans le garde de navigation globale:', error)
+    // En cas d'erreur inattendue, rediriger vers la page d'accueil
+    if (to.path !== '/') {
+      next('/')
+    } else {
+      next()
+    }
   }
-  
-
-  
-  next()
 })
 
 // Gestion des erreurs de navigation
