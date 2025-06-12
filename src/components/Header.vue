@@ -46,8 +46,8 @@ const toggleMobileMenu = () => {
 
         <!-- Actions -->
         <div class="hidden md:flex items-center space-x-4">
-          <button class="btn-secondary">Sign In</button>
-          <button class="btn-primary">Get Started</button>
+          <RouterLink to="/auth/login" class="btn-secondary">Connexion</RouterLink>
+          <RouterLink to="/auth/register" class="btn-primary">S'inscrire</RouterLink>
         </div>
 
         <!-- Mobile menu button -->
@@ -75,8 +75,8 @@ const toggleMobileMenu = () => {
           <span class="font-medium">{{ item.name }}</span>
         </RouterLink>
         <div class="pt-4 border-t border-gray-200 space-y-2">
-          <button class="w-full btn-secondary">Sign In</button>
-          <button class="w-full btn-primary">Get Started</button>
+          <RouterLink to="/auth/login" class="w-full btn-secondary" @click="mobileMenuOpen = false">Connexion</RouterLink>
+          <RouterLink to="/auth/register" class="w-full btn-primary" @click="mobileMenuOpen = false">S'inscrire</RouterLink>
         </div>
       </div>
     </div>

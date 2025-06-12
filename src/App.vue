@@ -10,7 +10,17 @@ const authStore = useAuthStore()
 const isLoading = ref(true)
 
 // Chemins publics qui ne nécessitent pas d'authentification
-const publicPaths = ['/', '/login', '/register', '/forgot-password', '/reset-password']
+const publicPaths = [
+  '/',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgot-password',
+  '/auth/reset-password'
+]
 
 // Vérifier si la route actuelle est publique
 const isPublicPath = (path: string) => {

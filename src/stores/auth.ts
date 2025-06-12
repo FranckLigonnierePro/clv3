@@ -24,12 +24,11 @@ export const useAuthStore = defineStore('auth', () => {
   const init = async () => {
     try {
       isLoading.value = true
-      const { data: sessionData } = await getSession()
+      const sessionData = await getSession()
       session.value = sessionData
       
       if (sessionData?.user) {
-        const { data: userData } = await getCurrentUser()
-        user.value = userData
+        user.value = sessionData.user
       }
       
       return { user: user.value, session: session.value }
