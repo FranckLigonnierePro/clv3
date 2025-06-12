@@ -57,8 +57,7 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: LandingPage,
     name: 'landing',
-    meta: { public: true, layout: 'empty' },
-    beforeEnter: redirectIfAuthenticated
+    meta: { public: true, layout: 'empty' }
   },
   
   // Routes d'authentification
@@ -235,10 +234,7 @@ router.beforeEach(async (to, from, next) => {
     }
   }
   
-  // Empêcher l'accès aux pages d'authentification si déjà connecté
-  if (to.matched.some(record => record.meta.public) && user) {
-    return next({ name: 'dashboard' })
-  }
+
   
   next()
 })

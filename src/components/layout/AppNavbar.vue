@@ -24,10 +24,16 @@ const navigateTo = (path: string) => {
 
 const handleLogout = async () => {
   try {
+    // First navigate to landing page
+    await router.push('/')
+    // Then perform logout
     await authStore.logout()
-    navigateTo('/login')
+    // Force a hard reload to ensure all auth state is cleared
+    window.location.reload()
   } catch (error) {
     console.error('Logout failed:', error)
+    // Even if there's an error, still try to redirect
+    window.location.href = '/'
   }
 }
 
@@ -112,26 +118,26 @@ const userMenuItems = [
                 aria-orientation="vertical"
                 aria-labelledby="user-menu"
               >
-                <router-link
-                  v-for="item in userMenuItems"
-                  :key="item.name"
-                  v-if="!item.action"
-                  :to="item.path"
-                  class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  role="menuitem"
-                >
-                  <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-400" />
-                  {{ item.name }}
-                </router-link>
-                <button
-                  v-else
-                  @click="item.action"
-                  class="w-full text-left flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  role="menuitem"
-                >
-                  <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-400" />
-                  {{ item.name }}
-                </button>
+                <template v-for="item in userMenuItems" :key="item.name">
+                  <router-link
+                    v-if="!item.action"
+                    :to="item.path"
+                    class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    role="menuitem"
+                  >
+                    <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-400" />
+                    {{ item.name }}
+                  </router-link>
+                  <button
+                    v-else
+                    @click="item.action"
+                    class="w-full text-left flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    role="menuitem"
+                  >
+                    <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-400" />
+                    {{ item.name }}
+                  </button>
+                </template>
               </div>
             </transition>
           </div>
@@ -206,25 +212,25 @@ const userMenuItems = [
           </div>
         </div>
         <div class="mt-3 space-y-1">
-          <router-link
-            v-for="item in userMenuItems"
-            :key="item.name"
-            v-if="!item.action"
-            :to="item.path"
-            @click="isMobileMenuOpen = false"
-            class="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-          >
-            <component :is="item.icon" class="mr-3 h-5 w-5" />
-            {{ item.name }}
-          </router-link>
-          <button
-            v-else
-            @click="item.action"
-            class="w-full text-left flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-          >
-            <component :is="item.icon" class="mr-3 h-5 w-5" />
-            {{ item.name }}
-          </button>
+          <template v-for="item in userMenuItems" :key="item.name">
+            <router-link
+              v-if="!item.action"
+              :to="item.path"
+              @click="isMobileMenuOpen = false"
+              class="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+            >
+              <component :is="item.icon" class="mr-3 h-5 w-5" />
+              {{ item.name }}
+            </router-link>
+            <button
+              v-else
+              @click="item.action"
+              class="w-full text-left flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+            >
+              <component :is="item.icon" class="mr-3 h-5 w-5" />
+              {{ item.name }}
+            </button>
+          </template>
         </div>
       </div>
       
