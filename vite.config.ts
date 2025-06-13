@@ -20,8 +20,15 @@ export default defineConfig({
   server: {
     port: 3000,
     strictPort: true,
-    // Enable SPA fallback
-    historyApiFallback: true,
+    // Configuration du mode history pour le SPA fallback
+    historyApiFallback: {
+      disableDotRule: true,
+      verbose: true
+    },
+    // Forcer le rechargement des pages 404
+    hmr: {
+      overlay: false
+    },
     // Proxy configuration for API requests
     proxy: {
       '/api': {

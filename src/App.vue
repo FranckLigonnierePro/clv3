@@ -34,14 +34,24 @@ const publicPaths = [
  * Vérifie si un chemin est public (ne nécessite pas d'authentification)
  */
 const isPublicPath = (path: string): boolean => {
-  // Nettoyer le chemin pour enlever les paramètres de requête et les fragments
-  const cleanPath = path.split('?')[0].split('#')[0]
+  if (!path) return false
   
-  // Vérifier si le chemin correspond exactement ou commence par un chemin public
-  return publicPaths.some(publicPath => 
-    cleanPath === publicPath || 
-    cleanPath.startsWith(`${publicPath}/`)
-  )
+  // Nettoyer le chemin pour enlever les paramètres de requête et les fragments
+  const cleanPath = path.split('?')[0].split('#')[0].toLowerCase().trim()
+  
+  // Vérifier si le chemin correspond exactement à un chemin public
+  if (publicPaths.some(p => p.toLowerCase() === cleanPath)) {
+    return true
+  }
+  
+  // Vérifier si le chemin commence par un chemin public suivi d'un /
+  return publicPaths.some(publicPath => {
+    const normalizedPublicPath = publicPath.toLowerCase()
+    return (
+      cleanPath === normalizedPublicPath ||
+      cleanPath.startsWith(`${normalizedPublicPath}/`)
+    )
+  })
 }
 
 /**
@@ -54,7 +64,12 @@ const initAuth = async () => {
     
     // Si l'utilisateur est connecté
     if (authStore.isAuthenticated) {
-      // Rediriger depuis les pages d'authentification vers le tableau de bord
+      // Ne pas rediriger depuis la page de visionnage
+      if (route.path.startsWith('/watch')) {
+        return
+      }
+      
+      // Rediriger depuis les autres pages publiques vers le tableau de bord
       if (isPublicPath(route.path) && route.path !== '/') {
         const redirectPath = route.query.redirect as string || '/app/dashboard'
         router.push(redirectPath)
@@ -96,9 +111,16 @@ const setupAuthListener = () => {
           // Mettre à jour l'utilisateur après une connexion réussie
           await authStore.init()
           
-          // Rediriger depuis les pages d'authentification vers le tableau de bord
+          // Ne pas rediriger depuis la page de visionnage
+          if (route.path.startsWith('/watch')) {
+            console.log('Page de visionnage détectée, pas de redirection')
+            return
+          }
+          
+          // Rediriger depuis les autres pages publiques vers le tableau de bord
           if (isPublicPath(route.path) && route.path !== '/') {
             const redirectPath = route.query.redirect as string || '/app/dashboard'
+            console.log('Redirection vers:', redirectPath)
             router.push(redirectPath)
           }
           break

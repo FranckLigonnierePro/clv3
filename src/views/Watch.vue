@@ -39,8 +39,8 @@
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { Room, Track } from 'livekit-client';
 
@@ -162,9 +162,9 @@ const cleanup = async () => {
 const connectToRoom = async () => {
   if (!props.room || !props.token) {
     const errorMsg = 'Paramètres de salle ou de jeton manquants';
-    console.error(errorMsg);
+    console.error(errorMsg, { room: props.room, hasToken: !!props.token });
     error.value = errorMsg;
-    return;
+    throw new Error(errorMsg);
   }
   
   roomName.value = props.room;
@@ -375,16 +375,38 @@ const handleInteraction = () => {
 };
 
 // Cycle de vie du composant
-onMounted(() => {
-  console.log('Montage du composant Watch');
-  console.log('Paramètres de la route:', { room: props.room, token: props.token });
+onMounted(async () => {
+  console.log('=== WATCH COMPONENT MOUNTED ===');
+  console.log('URL complète:', window.location.href);
+  console.log('Paramètres reçus:', { 
+    room: props.room, 
+    token: props.token,
+    hasRoom: !!props.room,
+    hasToken: !!props.token
+  });
+  
+  // Afficher tous les paramètres de l'URL
+  const urlParams = new URLSearchParams(window.location.search);
+  console.log('Tous les paramètres de l\'URL:', Object.fromEntries(urlParams.entries()));
   
   if (!props.room || !props.token) {
-    error.value = 'Paramètres de salle ou de jeton manquants';
+    const errorMsg = 'Paramètres de salle ou de jeton manquants. Assurez-vous que l\'URL est correcte.';
+    console.error(errorMsg, { room: props.room, hasToken: !!props.token });
+    error.value = errorMsg;
     return;
   }
   
-  connectToRoom();
+  console.log('Tentative de connexion à la room avec les paramètres:', { 
+    room: props.room, 
+    hasToken: !!props.token 
+  });
+  
+  try {
+    await connectToRoom();
+  } catch (err) {
+    console.error('Erreur lors de la connexion à la salle:', err);
+    error.value = 'Impossible de se connecter à la diffusion. Veuillez vérifier le lien et réessayer.';
+  }
   
   // Ajouter les écouteurs d'événements pour le déblocage audio
   document.addEventListener('click', handleInteraction, { once: true });

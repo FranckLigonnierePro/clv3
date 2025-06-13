@@ -79,7 +79,8 @@ const startLiveKit = async () => {
       },
       body: JSON.stringify({
         roomName: roomName.value,
-        participantName: `host-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        participantName: `host-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        canPublish: true // S'assurer que le token permet la publication
       })
     });
     
@@ -141,7 +142,7 @@ const startLiveKit = async () => {
           console.log('[LIVEKIT] Flux vidéo du canvas publié avec succès');
           
           // 6. Mettre à jour l'URL de partage
-          shareUrl.value = `${window.location.origin}/#/watch?room=${roomName.value}&token=${result.token}`;
+          shareUrl.value = `${window.location.origin}/watch?room=${roomName.value}&token=${result.token}`;
           console.log('URL de partage générée:', shareUrl.value);
         } catch (err) {
           console.error('[LIVEKIT] Erreur lors de la publication du flux vidéo du canvas :', err);
