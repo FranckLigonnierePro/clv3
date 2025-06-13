@@ -20,26 +20,20 @@ export default defineConfig({
   server: {
     port: 3000,
     strictPort: true,
-    // Configuration pour le mode history
+    // Enable SPA fallback
+    historyApiFallback: true,
+    // Proxy configuration for API requests
     proxy: {
-      // Proxy pour les routes d'API
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false
-      },
-      // Gestion du mode history pour les routes de l'application
-      '^/(?!@vite|@id|node_modules|src|assets|public).*': {
-        target: 'http://127.0.0.1:3000',
-        changeOrigin: true,
-        rewrite: (_path) => '/index.html'
       }
     },
-    // Configuration HMR
+    // HMR configuration
     hmr: {
-      port: 3000,
-      protocol: 'ws',
       host: 'localhost',
+      port: 3000
     }
   },
   build: {
