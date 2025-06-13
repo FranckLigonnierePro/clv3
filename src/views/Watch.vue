@@ -54,6 +54,24 @@ const roomName = ref('');
 // Configuration LiveKit
 const livekitUrl = import.meta.env.VITE_LIVEKIT_WS_URL || 'wss://clipstudio-vdf7emf1.livekit.cloud';
 
+// Props du composant
+const props = defineProps({
+  room: {
+    type: String,
+    required: true
+  },
+  token: {
+    type: String,
+    required: true
+  }
+});
+
+// Log des propriétés reçues
+console.log('Watch component mounted with props:', {
+  room: props.room,
+  token: props.token ? 'token-present' : 'token-missing'
+});
+
 // Gestion des pistes vidéo
 const handleTrackSubscribed = (track, publication, participant) => {
   console.log('Piste reçue:', {
@@ -142,43 +160,15 @@ const cleanup = async () => {
 
 // Connexion à la room
 const connectToRoom = async () => {
-  const { room: roomParam } = route.query;
-  
-  if (!roomParam) {
-    const errorMsg = 'Nom de salle manquant dans l\'URL.';
+  if (!props.room || !props.token) {
+    const errorMsg = 'Paramètres de salle ou de jeton manquants';
     console.error(errorMsg);
     error.value = errorMsg;
     return;
   }
   
-  // Générer un token côté client
-  let token;
-  try {
-    const response = await fetch('http://192.168.1.213:3001/api/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        roomName: roomParam,
-        participantName: `viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `Erreur HTTP ${response.status} lors de la génération du token`);
-    }
-    
-    const result = await response.json();
-    token = result.token;
-  } catch (err) {
-    console.error('Erreur lors de la génération du token:', err);
-    error.value = 'Erreur lors de la connexion au serveur';
-    return;
-  }
-  
-  roomName.value = roomParam;
+  roomName.value = props.room;
+  const token = props.token;
   console.log('Tentative de connexion à la room:', roomName.value);
   
   try {
@@ -376,24 +366,53 @@ const connectToRoom = async () => {
   }
 };
 
+// Gestion de l'interaction utilisateur pour débloquer l'audio
+const handleInteraction = () => {
+  if (videoRef.value) {
+    videoRef.value.muted = false;
+    videoRef.value.play().catch(e => console.error('Erreur de lecture audio:', e));
+  }
+};
+
 // Cycle de vie du composant
 onMounted(() => {
   console.log('Montage du composant Watch');
+  console.log('Paramètres de la route:', { room: props.room, token: props.token });
+  
+  if (!props.room || !props.token) {
+    error.value = 'Paramètres de salle ou de jeton manquants';
+    return;
+  }
+  
   connectToRoom();
   
-  // Gestion de l'interaction utilisateur pour débloquer l'audio
-  const handleInteraction = () => {
-    if (videoRef.value) {
-      videoRef.value.muted = false;
-    }
-  };
-  
+  // Ajouter les écouteurs d'événements pour le déblocage audio
   document.addEventListener('click', handleInteraction, { once: true });
   document.addEventListener('touchend', handleInteraction, { once: true });
 });
 
+// Surveiller les changements de paramètres de route
+watch(() => [props.room, props.token], () => {
+  if (props.room && props.token) {
+    console.log('Nouveaux paramètres détectés:', { room: props.room, token: props.token });
+    connectToRoom();
+  }
+});
+
+// Nettoyage lors du démontage du composant
 onUnmounted(async () => {
   console.log('Démontage du composant Watch');
+  
+  // Supprimer les écouteurs d'événements
+  document.removeEventListener('click', handleInteraction);
+  document.removeEventListener('touchend', handleInteraction);
+  
+  // Nettoyer la connexion à la salle si nécessaire
+  if (room.value) {
+    room.value.disconnect();
+  }
+  
+  // Nettoyer les autres ressources
   await cleanup();
 });
 </script>

@@ -25,7 +25,9 @@ const publicPaths = [
   '/auth/reset-password',
   '/auth/verify',
   '/404',
-  '/unauthorized'
+  '/unauthorized',
+  '/live',
+  '/watch'
 ]
 
 /**

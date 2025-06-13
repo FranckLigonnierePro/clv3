@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { AccessToken } from 'livekit-server-sdk';
+import path from 'path';
 
 // Charger les variables d'environnement depuis .env.server
 import { config } from 'dotenv';
@@ -88,7 +89,19 @@ app.post('/api/token', async (req, res) => {
   }
 });
 
+// Servir les fichiers statiques du build de production
+if (process.env.NODE_ENV === 'production') {
+  const __dirname = path.resolve();
+  app.use(express.static(path.join(__dirname, 'dist')));
+  
+  // Gérer le mode history de Vue Router
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  });
+}
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`LiveKit URL: ${process.env.LIVEKIT_URL}`);
+  console.log(`Mode: ${process.env.NODE_ENV || 'development'}`);
 });

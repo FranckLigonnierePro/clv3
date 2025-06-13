@@ -230,6 +230,43 @@ const routes: RouteRecordRaw[] = [
       }
     ]
   },
+  // Route publique pour les lives (compatibilité avec les anciens liens)
+  {
+    path: '/watch',
+    name: 'public-watch',
+    component: Watch,
+    meta: { 
+      public: true, 
+      title: 'Visionnage en direct',
+      layout: 'empty' 
+    },
+    props: (route) => {
+      // Extraire les paramètres de l'URL complète si nécessaire
+      const url = new URL(window.location.href);
+      const room = url.searchParams.get('room') || '';
+      const token = url.searchParams.get('token') || '';
+      
+      console.log('Route params:', { room, token });
+      
+      return {
+        room,
+        token
+      };
+    }
+  },
+  
+  // Nouvelle route publique pour les lives
+  {
+    path: '/live',
+    redirect: to => ({
+      path: '/watch',
+      query: { 
+        room: to.query.room,
+        token: to.query.token
+      }
+    })
+  },
+  
   // Routes d'erreur
   {
     path: '/404',
@@ -253,7 +290,8 @@ const routes: RouteRecordRaw[] = [
 
 // Création du routeur
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // Forcer le mode history avec une base propre
+  history: createWebHistory('/'),
   routes,
   scrollBehavior(to, from, savedPosition) {
     // Faire défiler vers le haut lors du changement de route
@@ -313,6 +351,11 @@ router.beforeEach(async (to, from, next) => {
         name: 'dashboard',
         replace: true
       })
+    }
+    
+    // Ne pas rediriger si c'est la route de visionnage public
+    if (to.path === '/watch' || to.path === '/live') {
+      return next()
     }
     
     // Rediriger la racine vers le tableau de bord si l'utilisateur est connecté
