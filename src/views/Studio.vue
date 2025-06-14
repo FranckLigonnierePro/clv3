@@ -1,381 +1,125 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref, watch, nextTick, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Room, LocalVideoTrack } from 'livekit-client'
-import { 
-  Video, 
-  VideoOff, 
-  Image, 
-  Monitor, 
-  Type, 
-  Play, 
-  Square,
-  Mic, 
-  MicOff, 
-  Grid3X3, 
-  Lock, 
-  Unlock,
-  Settings,
-  ChevronDown,
-  Plus,
-  Trash2,
-  Move,
-  RotateCcw,
-  FileVideo,
-  Camera,
-  Users,
-  Link
-} from 'lucide-vue-next'
+import { Video, Monitor, Grid3X3, Lock, Unlock, Settings, Move, Type, Image as ImageIcon, X, Maximize2, Minimize2, Copy, Check, Users } from 'lucide-vue-next'
+import { Room, RemoteTrack, RemoteParticipant, LocalVideoTrack, LocalParticipant, Track } from 'livekit-client' // Added Track back for type usage
+
+// Déclaration des types
+type CanvasElementType = 'text' | 'camera' | 'image' | 'screen' | 'video'
+
+interface CanvasElement {
+  id: string
+  type: CanvasElementType
+  x: number
+  y: number
+  width: number
+  height: number
+  locked: boolean
+  data: any
+  visible?: boolean
+  rotation?: number
+}
+
+// LiveKit state interface
+interface LiveKitState {
+  room: Room | null
+  isPublishing: boolean
+  error: string
+  participantCount: number
+  localVideoTrack: LocalVideoTrack | null
+  isLive: boolean
+  animationId: number | null
+  localParticipant: LocalParticipant | null
+}
+import { Link } from 'lucide-vue-next'
 import Canvas from '../components/studio/Canvas.vue'
 import SceneSelector from '../components/studio/SceneSelector.vue'
 import ControlBar from '../components/studio/ControlBar.vue'
 import ToolPanel from '../components/studio/ToolPanel.vue'
 import SettingsPanel from '../components/studio/SettingsPanel.vue'
 
-// LiveKit state
-const generateRoomName = () => `salle-${Math.random().toString(36).substring(2, 8)}`
-const roomName = ref('')
-const livekitToken = ref('')
-const isPublishing = ref(false)
-const shareUrl = ref('') // Généré sous la forme `${window.location.origin}/#/watch?room=${roomName.value}&token=${livekitToken.value}`
-const livekitError = ref('')
-const showCopiedNotification = ref(false)
-const livekitRoom = ref<any>(null) // Room | null
-// const livekitRoom = ref<Room | null>(null) // décommente après install
-const isLive = ref(false)
-const participantCount = ref(1) // Commence à 1 pour le streamer
-const canvasComponentRef = ref<any>(null)
+interface CanvasElement {
+  id: string
+  type: CanvasElementType
+  x: number
+  y: number
+  width: number
+  height: number
+  locked: boolean
+  data: any
+  visible?: boolean
+  rotation?: number
+}
 
-// Copier le lien de partage dans le presse-papier
-const copyShareLink = () => {
-  if (shareUrl.value) {
-    navigator.clipboard.writeText(shareUrl.value)
-    showCopiedNotification.value = true
-    setTimeout(() => {
-      showCopiedNotification.value = false
-    }, 3000)
+// LiveKit state
+interface LiveKitState {
+  room: Room | null
+  isPublishing: boolean
+  error: string
+  participantCount: number
+  localVideoTrack: LocalVideoTrack | null
+  isLive: boolean
+  animationId: number | null
+  localParticipant: LocalParticipant | null
+}
+
+const livekitState = ref<LiveKitState>({
+  room: null,
+  isPublishing: false,
+  error: '',
+  participantCount: 0,
+  localVideoTrack: null,
+  isLive: false,
+  animationId: null,
+  localParticipant: null
+})
+
+// ...
+
+// Update participant count function
+const updateParticipantCount = (room: Room | null): void => {
+  if (room) {
+    livekitState.value.participantCount = room.remoteParticipants.size + 1 // +1 for local participant
   }
 }
 
-// Fonction pour démarrer la diffusion LiveKit
-const startLiveKit = async () => {
-  livekitError.value = ''
-  if (!roomName.value) {
-    livekitError.value = 'Le nom de la room est requis.'
-    return
+// Handle track state change
+const handleTrackStateChange = (track: MediaStreamTrack): void => {
+  console.log('Track state changed:', track.readyState, track)
+  
+  // Use the 'enabled' property which exists on MediaStreamTrack
+  if (track.kind === 'video') {
+    console.log('Video track state updated:', track.enabled ? 'enabled' : 'disabled')
   }
+}
+
+// Handle track subscriptions
+const handleTrackSubscribed = (
+  track: RemoteTrack,
+  _publication: unknown, // eslint-disable-line @typescript-eslint/no-unused-vars
+  participant: RemoteParticipant
+): void => {
+  console.log('Track subscribed:', track.kind, 'from', participant.identity)
   
-  isPublishing.value = true
+  // Handle remote track subscription
+  if (track.kind === 'video' || track.kind === 'audio') {
+    // Attach the track to a media element or process it as needed
+    console.log("Attaching ${track.kind} track from ${participant.identity}")
+  }
+}
+
+// Handle track unsubscribed
+const handleTrackUnsubscribed = (
+  track: RemoteTrack,
+  _publication: unknown, // eslint-disable-line @typescript-eslint/no-unused-vars
+  participant: RemoteParticipant
+): void => {
+  console.log('Track unsubscribed:', track.kind, 'from', participant.identity)
   
-  try {
-    // 1. Obtenir un token du serveur
-    console.log('Tentative de génération du token...');
-    
-    // 2. Obtenir le token du serveur
-    const response = await fetch('http://localhost:3001/api/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        roomName: roomName.value,
-        participantName: `host-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        canPublish: true // S'assurer que le token permet la publication
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      console.error('Erreur de réponse du serveur:', response.status, error);
-      throw new Error(error.error || `Erreur HTTP ${response.status} lors de la génération du token`);
-    }
-    
-    const result = await response.json().catch(e => {
-      console.error('Erreur lors du parsing de la réponse:', e);
-      throw new Error('Réponse invalide du serveur');
-    });
-    
-    const { token, url } = result;
-    livekitToken.value = token;
-    
-    // 3. Initialiser la connexion à la salle LiveKit
-    livekitRoom.value = new Room({
-      // Activer l'audio et la vidéo automatiquement
-      adaptiveStream: true,
-      dynacast: true,
-      publishDefaults: {
-        simulcast: true,
-        videoCodec: 'vp8',
-        videoEncoding: {
-          maxBitrate: 2_500_000,
-          maxFramerate: 30,
-        },
-      },
-      videoCaptureDefaults: {
-        resolution: { width: 1280, height: 720 }
-      }
-    });
-    
-    console.log('Connexion à la salle LiveKit...', { 
-      url: result.url,
-      token: result.token ? '***' + result.token.slice(-10) : 'manquant'
-    });
-    
-    // 4. Se connecter à la salle
-    await livekitRoom.value.connect(result.url, result.token);
-    console.log('[LIVEKIT] Connecté à la salle avec succès');
-    
-    // 5. Une fois connecté, publier le flux vidéo du canvas
-    await nextTick(); // s'assurer que le canvas est monté
-    const canvas = canvasComponentRef.value?.getCanvas();
-    if (!canvas) {
-      console.error('[LIVEKIT] Canvas non trouvé, impossible de publier le flux');
-    } else {
-      const stream = canvas.captureStream(30); // 30 FPS
-      const [videoTrack] = stream.getVideoTracks();
-      if (!videoTrack) {
-        console.error('[LIVEKIT] Aucune piste vidéo trouvée dans le flux du canvas');
-      } else {
-        try {
-          const livekitVideoTrack = new LocalVideoTrack(videoTrack);
-          await livekitRoom.value.localParticipant.publishTrack(livekitVideoTrack);
-          console.log('[LIVEKIT] Flux vidéo du canvas publié avec succès');
-          
-          // 6. Mettre à jour l'URL de partage
-          shareUrl.value = `${window.location.origin}/watch?room=${roomName.value}&token=${result.token}`;
-          console.log('URL de partage générée:', shareUrl.value);
-        } catch (err) {
-          console.error('[LIVEKIT] Erreur lors de la publication du flux vidéo du canvas :', err);
-          throw err; // Propage l'erreur pour qu'elle soit gérée par le bloc catch externe
-        }
-      }
-    }
-    
-    // Gérer les événements de la room
-    livekitRoom.value
-      .on('disconnected', () => {
-        console.log('Déconnecté de la room');
-        stopLiveKit();
-      })
-      .on('reconnecting', () => console.log('Reconnexion...'))
-      .on('reconnected', () => {
-        console.log('Reconnecté');
-        updateParticipantCount();
-      })
-      .on('participantConnected', () => {
-        console.log('Nouveau participant connecté');
-        updateParticipantCount();
-      })
-      .on('participantDisconnected', () => {
-        console.log('Participant déconnecté');
-        updateParticipantCount();
-      });
-    
-    // Mettre à jour le nombre de participants initial
-    updateParticipantCount();
-    
-    // Référence pour l'animation
-    let animationId = null;
-    
-    // 3. Capturer et diffuser le contenu du canvas
-    const captureAndPublishCanvas = async () => {
-      const canvas = canvasComponentRef.value?.getCanvas?.();
-      if (!canvas) throw new Error('Canvas introuvable');
-      
-      console.log('Démarrage de la diffusion du canvas...');
-      
-      // Initialisation du contexte 2D du canvas
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Impossible d\'obtenir le contexte 2D du canvas');
-      
-      // Fonction pour dessiner le contenu du canvas
-      const drawCanvas = () => {
-        // Ne pas effacer le contenu existant du canvas
-        // pour permettre au rendu original de rester visible
-        
-        // Si vous voulez ajouter des éléments supplémentaires au flux live,
-        // vous pouvez les ajouter ici, mais sans effacer le contenu existant
-        
-        // Dessiner les éléments de la scène
-        const elements = currentElements.value || [];
-        elements.forEach(element => {
-          if (!element.visible) return;
-          
-          ctx.save();
-          
-          // Appliquer les transformations
-          ctx.translate(element.x + element.width / 2, element.y + element.height / 2);
-          ctx.rotate((element.rotation || 0) * Math.PI / 180);
-          
-          // Dessiner en fonction du type d'élément
-          switch (element.type) {
-            case 'image':
-              if (element.data?.image) {
-                ctx.drawImage(
-                  element.data.image,
-                  -element.width / 2,
-                  -element.height / 2,
-                  element.width,
-                  element.height
-                );
-              }
-              break;
-              
-            case 'text':
-              if (element.data?.text) {
-                ctx.fillStyle = element.data.color || 'white';
-                ctx.font = `${element.data.fontSize || 16}px ${element.data.fontFamily || 'Arial'}`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(
-                  element.data.text,
-                  0,
-                  0,
-                  element.width
-                );
-              }
-              break;
-              
-            // Ajouter d'autres types d'éléments au besoin
-          }
-          
-          ctx.restore();
-        });
-        
-        // Horodatage désactivé
-        // ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        // ctx.fillRect(10, canvas.height - 40, 200, 30);
-        // ctx.fillStyle = 'white';
-        // ctx.font = '16px Arial';
-        // ctx.textAlign = 'left';
-        // ctx.textBaseline = 'middle';
-        // ctx.fillText(new Date().toLocaleTimeString(), 20, canvas.height - 25);
-        
-        // Planifier la prochaine mise à jour
-        animationId = requestAnimationFrame(drawCanvas);
-      };
-      
-      // Démarrer la boucle de rendu
-      drawCanvas();
-      
-      // Capturer le flux vidéo du canvas
-      const stream = canvas.captureStream(30);
-      console.log('Flux capturé, pistes disponibles:', stream.getTracks().map(t => ({
-        kind: t.kind,
-        id: t.id,
-        enabled: t.enabled,
-        readyState: t.readyState
-      })));
-      
-      // Créer une piste vidéo à partir du flux du canvas
-      const [videoTrack] = stream.getVideoTracks();
-      if (!videoTrack) throw new Error('Aucune piste vidéo disponible');
-      
-      const localVideoTrack = new LocalVideoTrack(videoTrack);
-      
-      console.log('Piste vidéo créée:', {
-        id: localVideoTrack.sid,
-        kind: localVideoTrack.kind,
-        isMuted: localVideoTrack.isMuted,
-        isEnabled: localVideoTrack.isEnabled
-      });
-      
-      // Publier la piste vidéo dans la room
-      console.log('Publication de la piste vidéo...');
-      try {
-        await room.localParticipant.publishTrack(localVideoTrack, {
-          name: 'canvas-stream',
-          simulcast: true,
-          videoEncoding: {
-            maxBitrate: 2_500_000,
-            maxFramerate: 30,
-          },
-        });
-        
-        console.log('Piste vidéo publiée avec succès');
-        
-        // Vérifier la publication
-        console.log('Liste des pistes publiées:', room.localParticipant);
-        
-        // Vérifier si tracks existe et est itérable
-        if (room.localParticipant.tracks) {
-          try {
-            // Essayer de convertir en tableau de différentes manières selon le type
-            let publications = [];
-            
-            if (Array.isArray(room.localParticipant.tracks)) {
-              publications = room.localParticipant.tracks;
-            } else if (room.localParticipant.tracks instanceof Map) {
-              publications = Array.from(room.localParticipant.tracks.values());
-            } else if (room.localParticipant.tracks instanceof Set) {
-              publications = Array.from(room.localParticipant.tracks);
-            } else if (typeof room.localParticipant.tracks === 'object') {
-              // Pour les objets simples
-              publications = Object.values(room.localParticipant.tracks);
-            }
-            
-            console.log(`Nombre de pistes publiées: ${publications.length}`);
-            
-            publications.forEach((pub, index) => {
-              if (pub) {
-                console.log(`Piste [${index}]:`, {
-                  trackSid: pub.trackSid || 'non disponible',
-                  kind: pub.kind || 'inconnu',
-                  isSubscribed: pub.isSubscribed,
-                  track: pub.track ? 'présente' : 'absente',
-                  // Ajouter plus d'informations de débogage si nécessaire
-                  ...(pub.track ? {
-                    id: pub.track.id,
-                    readyState: pub.track.readyState,
-                    enabled: pub.track.enabled
-                  } : {})
-                });
-              }
-            });
-          } catch (logError) {
-            console.error('Erreur lors de la journalisation des pistes publiées:', logError);
-            console.log('Tentative alternative de journalisation des pistes:', room.localParticipant.tracks);
-          }
-        } else {
-          console.warn('Aucune piste disponible dans localParticipant.tracks');
-        }
-        
-      } catch (publishError) {
-        console.error('Erreur lors de la publication de la piste vidéo:', publishError);
-        // Nettoyer en cas d'erreur
-        if (animationId) {
-          cancelAnimationFrame(animationId);
-          animationId = null;
-        }
-        throw publishError;
-      }
-      
-      // Nettoyer lors de la déconnexion
-      room.on('disconnected', () => {
-        if (animationId) {
-          cancelAnimationFrame(animationId);
-          animationId = null;
-        }
-        if (localVideoTrack) {
-          localVideoTrack.stop();
-        }
-      });
-    };
-    
-    await captureAndPublishCanvas();
-    
-    // 5. Générer l'URL de partage pour les spectateurs
-    shareUrl.value = `${window.location.origin}/watch?room=${roomName.value}`;
-    
-    // Gérer les événements de la room
-    room.on('disconnected', () => {
-      stopLiveKit();
-    });
-    
-  } catch (e: any) {
-    console.error('Erreur LiveKit:', e);
-    livekitError.value = e.message || 'Erreur lors de la connexion à LiveKit';
-    isPublishing.value = false;
+  // Clean up track resources if needed
+  if (track.kind === 'video' || track.kind === 'audio') {
+    // Detach track from media elements or clean up resources
+    console.log("Cleaning up ${track.kind} track from ${participant.identity}")
   }
 }
 
@@ -393,8 +137,6 @@ const stopLiveKit = async () => {
   shareUrl.value = '';
   livekitError.value = '';
 }
-
-
 
 const route = useRoute()
 const studioId = route.params.id
@@ -415,9 +157,6 @@ const exportResolution = ref(exportResolutions[1]) // 1080p par défaut
 const showExportSettings = ref(false)
 const allElementsLocked = ref(false)
 const currentBackground = ref<HTMLImageElement | null>(null)
-const showSettings = ref(false)
-const showGrid = ref(true)
-const snapEnabled = ref(true)
 
 // Canvas format
 const canvasFormat = ref<'16:9' | '9:16'>('16:9')
@@ -497,7 +236,7 @@ const initCamera = async () => {
     
     // Add camera element to current scene
     const cameraElement: CanvasElement = {
-      id: `camera-${Date.now()}`,
+      id: 'camera-${Date.now()}',
       type: 'camera',
       x: canvasFormat.value === '16:9' ? 600 : 200,
       y: canvasFormat.value === '16:9' ? 300 : 500,
@@ -524,7 +263,7 @@ const initScreenShare = async () => {
     
     // Add screen share element to current scene
     const screenElement: CanvasElement = {
-      id: `screen-${Date.now()}`,
+      id: 'screen-${Date.now()}',
       type: 'screen',
       x: 100,
       y: 100,
@@ -551,7 +290,7 @@ const addImage = () => {
       const reader = new FileReader()
       reader.onload = (e) => {
         const imageElement: CanvasElement = {
-          id: `image-${Date.now()}`,
+          id: 'image-${Date.now()}',
           type: 'image',
           x: 200,
           y: 200,
@@ -571,7 +310,7 @@ const addImage = () => {
 // Add text element
 const addText = () => {
   const textElement: CanvasElement = {
-    id: `text-${Date.now()}`,
+    id: 'text-${Date.now()}',
     type: 'text',
     x: 300,
     y: 300,
@@ -598,7 +337,7 @@ const addVideo = () => {
     if (file) {
       const url = URL.createObjectURL(file)
       const videoElement: CanvasElement = {
-        id: `video-${Date.now()}`,
+        id: 'video-${Date.now()}',
         type: 'video',
         x: 250,
         y: 150,
@@ -880,8 +619,8 @@ const startRecording = async () => {
       const a = document.createElement('a')
       a.style.display = 'none'
       a.href = url
-      a.download = `enregistrement-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`
-      document.body.appendChild(a)
+      a.download = 'enregistrement-${new Date().toISOString().replace(/[:.]/g, '-')}.webm'
+      document.body.appendChild(a);
       a.click()
       setTimeout(() => {
         URL.revokeObjectURL(url)
@@ -935,7 +674,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-900 text-white">
+  <div class="min-h-screen bg-gray-100 flex flex-col">
     <!-- Notification de lien copié -->
     <div v-if="isLinkCopied" class="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-md shadow-lg z-50 transition-opacity duration-300">
       Lien copié dans le presse-papiers !
@@ -985,96 +724,100 @@ onMounted(() => {
       </div>
     </header>
 
-    <div class="flex h-[calc(100vh-80px)]">
-      <!-- Tool Panel -->
-      <ToolPanel
-        :is-live="isLive"
-        :selected-element="selectedElement"
-        :current-elements="currentElements"
-        @add-camera="initCamera"
-        @add-image="addImage"
-        @add-text="addText"
-        @add-video="addVideo"
-        @add-screen="initScreenShare"
-        @delete-element="deleteSelectedElement"
-      />
+    <main class="flex-1 p-4">
+      <div class="max-w-7xl mx-auto w-full">
+        <div class="flex flex-col md:flex-row gap-4">
+          <!-- Tool Panel -->
+          <div class="w-full md:w-64 flex-shrink-0">
+            <ToolPanel
+              :is-live="isLive"
+              :selected-element="selectedElement"
+              :current-elements="currentElements"
+              @add-camera="initCamera"
+              @add-image="addImage"
+              @add-text="addText"
+              @add-video="addVideo"
+              @add-screen="initScreenShare"
+              @delete-element="deleteSelectedElement"
+            />
+          </div>
 
-      <!-- Main Canvas Area -->
-      <div class="flex-1 flex flex-col">
-        <!-- Canvas Controls -->
-        <div class="bg-gray-800 border-b border-gray-700 px-6 py-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <!-- Grid Toggle -->
-                <button
-                  @click="showGrid = !showGrid"
-                  :class="[
-                    'flex items-center space-x-2 px-3 py-2 rounded-xl transition-colors duration-200',
-                    showGrid ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
-                  ]"
-                  :title="showGrid ? 'Masquer la grille' : 'Afficher la grille'"
-                >
-                  <Grid3X3 :size="18" />
-                </button>
-
-                <!-- Format Toggle -->
-                <button
-                  @click="toggleCanvasFormat"
-                  class="flex items-center space-x-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition-colors duration-200"
-              >
-                <Monitor class="w-4 h-4" />
-                <span class="text-sm">{{ canvasFormat }}</span>
-              </button>
-
-                <!-- Bouton Copier le lien (visible uniquement en live) -->
-                <div v-if="isLive && shareUrl" class="relative">
-                  <div class="flex rounded-md shadow-sm">
-                    <input
-                      type="text"
-                      :value="shareUrl"
-                      readonly
-                      class="flex-1 min-w-0 block w-full px-3 py-2 rounded-l-md border-0 bg-gray-700 text-white text-sm"
-                      style="min-width: 300px;"
-                    >
-                    <button
-                      @click="copyToClipboard"
-                      class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-r-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      {{ copyButtonText }}
-                    </button>
-                  </div>
-                </div>
-                
-              <!-- Bouton Enregistrer avec menu de résolution -->
-              <div class="relative">
-                <div class="flex items-center space-x-2">
-                  <!-- Bouton des paramètres d'export -->
+          <!-- Main Canvas Area -->
+          <div class="flex-1 flex flex-col bg-white rounded-lg shadow-sm overflow-hidden">
+            <!-- Canvas Controls -->
+            <div class="bg-gray-50 border-b border-gray-200 px-6 py-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                  <!-- Grid Toggle -->
                   <button
-                    @click.stop="showExportSettings = !showExportSettings"
-                    class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"
-                    :class="{ 'bg-gray-700': showExportSettings }"
-                    title="Paramètres d'export"
-                  >
-                    <Settings class="w-5 h-5" />
-                  </button>
-
-                  <!-- Bouton d'enregistrement -->
-                  <button
-                    @click="toggleRecording"
+                    @click="showGrid = !showGrid"
                     :class="[
-                      'flex items-center px-4 py-2 rounded-full font-medium transition-colors',
-                      isRecording 
-                        ? 'bg-red-600 hover:bg-red-700 text-white' 
-                        : 'bg-white hover:bg-gray-200 text-gray-900'
+                      'flex items-center space-x-2 px-3 py-2 rounded-xl transition-colors duration-200',
+                      showGrid ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
                     ]"
+                    :title="showGrid ? 'Masquer la grille' : 'Afficher la grille'"
                   >
-                    <span class="w-3 h-3 rounded-full bg-current mr-2"></span>
-                    {{ isRecording ? 'ARRÊTER' : 'ENREGISTRER' }}
+                    <Grid3X3 :size="18" />
                   </button>
-                </div>
 
-                <!-- Menu déroulant des paramètres d'export -->
-                <div v-if="showExportSettings" class="absolute right-0 mt-2 w-56 bg-gray-800 rounded-md shadow-lg z-50">
+                  <!-- Format Toggle -->
+                  <button
+                    @click="toggleCanvasFormat"
+                    class="flex items-center space-x-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition-colors duration-200"
+                  >
+                    <Monitor class="w-4 h-4" />
+                    <span class="text-sm">{{ canvasFormat }}</span>
+                  </button>
+
+                  <!-- Bouton Copier le lien (visible uniquement en live) -->
+                  <div v-if="isLive && shareUrl" class="relative">
+                    <div class="flex rounded-md shadow-sm">
+                      <input
+                        type="text"
+                        :value="shareUrl"
+                        readonly
+                        class="flex-1 min-w-0 block w-full px-3 py-2 rounded-l-md border-0 bg-gray-700 text-white text-sm"
+                        style="min-width: 300px;"
+                      >
+                      <button
+                        @click="copyToClipboard"
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-r-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      >
+                        {{ copyButtonText }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Bouton Enregistrer avec menu de résolution -->
+                  <div class="relative">
+                    <div class="flex items-center space-x-2">
+                      <!-- Bouton des paramètres d'export -->
+                      <button
+                        @click.stop="showExportSettings = !showExportSettings"
+                        class="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"
+                        :class="{ 'bg-gray-700': showExportSettings }"
+                        title="Paramètres d'export"
+                      >
+                        <Settings class="w-5 h-5" />
+                      </button>
+
+                      <!-- Bouton d'enregistrement -->
+                      <button
+                        @click="toggleRecording"
+                        :class="[
+                          'flex items-center px-4 py-2 rounded-full font-medium transition-colors',
+                          isRecording 
+                            ? 'bg-red-600 hover:bg-red-700 text-white' 
+                            : 'bg-white hover:bg-gray-200 text-gray-900'
+                        ]"
+                      >
+                        <span class="w-3 h-3 rounded-full bg-current mr-2"></span>
+                        {{ isRecording ? 'ARRÊTER' : 'ENREGISTRER' }}
+                      </button>
+                    </div>
+
+                    <!-- Menu déroulant des paramètres d'export -->
+                    <div v-if="showExportSettings" class="absolute right-0 mt-2 w-56 bg-gray-800 rounded-md shadow-lg z-50">
                   <div class="p-2">
                     <div class="px-3 py-2">
                       <label class="block text-sm font-medium text-gray-300 mb-1">Résolution d'export</label>
@@ -1154,75 +897,81 @@ onMounted(() => {
                 <Unlock v-else class="w-4 h-4" />
                 <span class="text-sm">{{ allElementsLocked ? 'Locked' : 'Lock All' }}</span>
               </button>
-            </div>
+                </div>
 
-            <!-- Element Count and Participants -->
-            <div class="flex items-center space-x-4">
-              <div class="text-sm text-gray-400">
-                {{ currentElements.length }} éléments
+                <!-- Element Count and Participants -->
+                <div class="flex items-center space-x-4 ml-auto">
+                  <div class="text-sm text-gray-600">
+                    {{ currentElements.length }} éléments
+                  </div>
+                  <div v-if="isLive" class="flex items-center text-sm text-green-400">
+                    <span class="relative flex h-2 w-2 mr-1">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    {{ participantCount }} {{ participantCount > 1 ? 'spectateurs' : 'spectateur' }}
+                  </div>
+                </div>
               </div>
-              <div v-if="isLive" class="flex items-center text-sm text-green-400">
-                <span class="relative flex h-2 w-2 mr-1">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                {{ participantCount }} {{ participantCount > 1 ? 'spectateurs' : 'spectateur' }}
+            
+              <!-- Canvas -->
+              <div class="flex-1 p-6 bg-white">
+                <Canvas
+                  ref="canvasComponentRef"
+                  :elements="currentElements"
+                  :format="canvasFormat"
+                  :show-grid="showGrid"
+                  :snap-enabled="snapEnabled"
+                  :is-live="isLive"
+                  :selected-element="selectedElement"
+                  @element-select="handleElementSelect"
+                  @element-update="handleElementUpdate"
+                  @element-delete="handleElementDelete"
+                />
+
+                <!-- Bouton de partage Live -->
+                <div class="mt-6 flex justify-center">
+                  <div class="relative">
+                    <button
+                      @click="copyShareLink"
+                      class="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all shadow-lg hover:shadow-xl"
+                    >
+                      <Link class="w-5 h-5" />
+                      <span>Copier le lien du live</span>
+                    </button>
+                    <div 
+                      v-if="showShareTooltip"
+                      class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-sm py-1 px-3 rounded whitespace-nowrap"
+                    >
+                      Lien copié !
+                    </div>
+                    <div v-if="livekitError" class="text-red-400 text-xs mt-2 text-center">{{ livekitError }}</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- Canvas -->
-        <div class="flex-1 p-6 bg-gray-900">
-          <Canvas
-            ref="canvasComponentRef"
-            :elements="currentElements"
-            :format="canvasFormat"
-            :show-grid="showGrid"
-            :snap-enabled="snapEnabled"
-            :is-live="isLive"
-            :selected-element="selectedElement"
-            @element-select="handleElementSelect"
-            @element-update="handleElementUpdate"
-            @element-delete="handleElementDelete"
-          />
-
-           <!-- Bouton de partage Live -->
-           <div class="mt-6 flex justify-center">
-             <div class="relative">
-               <button
-                 @click="copyShareLink"
-                 class="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium transition-all shadow-lg hover:shadow-xl"
-               >
-                 <Link class="w-5 h-5" />
-                 <span>Copier le lien du live</span>
-               </button>
-               <div 
-                 v-if="showShareTooltip"
-                 class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-sm py-1 px-3 rounded whitespace-nowrap"
-               >
-                 Lien copié !
-               </div>
-               <div v-if="livekitError" class="text-red-400 text-xs mt-2 text-center">{{ livekitError }}</div>
-             </div>
-           </div>
-        </div>
       </div>
-    </div>
+    </main>
 
     <!-- Control Bar -->
-    <ControlBar
-      :is-live="isLive"
-      :is-recording="isRecording"
-      :video-enabled="videoEnabled"
-      :audio-enabled="audioEnabled"
-      :audio-level="audioLevel"
-      :share-url="shareUrl"
-      @toggle-live="handleToggleLive"
-      @toggle-recording="toggleRecording"
-      @toggle-audio="audioEnabled = !audioEnabled"
-      @toggle-video="videoEnabled = !videoEnabled"
-    />
+    <footer class="bg-white border-t border-gray-200 mt-4">
+      <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+        <ControlBar
+          :is-live="isLive"
+          :is-recording="isRecording"
+          :video-enabled="videoEnabled"
+          :audio-enabled="audioEnabled"
+          :audio-level="audioLevel"
+          :share-url="shareUrl"
+          @toggle-live="handleToggleLive"
+          @toggle-recording="toggleRecording"
+          @toggle-audio="audioEnabled = !audioEnabled"
+          @toggle-video="videoEnabled = !videoEnabled"
+        />
+      </div>
+    </footer>
 
     <!-- Settings Panel -->
     <SettingsPanel
@@ -1239,3 +988,7 @@ onMounted(() => {
     />
   </div>
 </template>
+
+<style scoped>
+/* Styles spécifiques au composant */
+</style>
