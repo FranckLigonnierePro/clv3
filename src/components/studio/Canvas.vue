@@ -74,7 +74,7 @@ const canvasDimensions = ref({
 const updateCanvasSize = () => {
   const padding = 32
   const screenWidth = window.innerWidth - padding
-  const screenHeight = window.innerHeight - padding
+  const screenHeight = window.innerHeight - 178 - padding
 
   const targetRatio = props.format === '9:16' ? 9 / 16 : 16 / 9
 
@@ -180,6 +180,14 @@ const resizeObserver = new ResizeObserver(() => {
 onMounted(() => {
   // Mettre à jour la taille initiale
   updateCanvasSize()
+
+  if (containerRef.value) {
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(updateCanvasSize)
+    })
+    observer.observe(containerRef.value)
+    onBeforeUnmount(() => observer.disconnect())
+  }
   
   window.addEventListener('resize', updateCanvasSize)
   
@@ -561,7 +569,7 @@ defineExpose({
     <!-- Canvas principal -->
     <canvas
       ref="canvasRef"
-      class="bg-black rounded-2xl shadow-sm"
+      class="bg-black rounded-2xl shadow-sm block"
       :style="{
         width: `${canvasDimensions.width}px`,
         height: `${canvasDimensions.height}px`,

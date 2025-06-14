@@ -71,8 +71,8 @@ const saveProject = () => {
 </script>
 
 <template>
-  <div class="studio-wrapper">
-    <div class="studio-container">
+  <div class="grid grid-rows-[1fr_auto] h-[calc(100%-80px)] w-full">
+    <div class="flex justify-center items-center p-4 min-h-0 overflow-hidden w-full">
       <Canvas 
         ref="canvasRef"
         :elements="elements"
@@ -86,7 +86,7 @@ const saveProject = () => {
       />
     </div>
     
-    <footer class="studio-footer">
+    <footer class="fixed bottom-0 w-full h-20 bg-black/80 backdrop-blur flex justify-between items-center px-8 border-t border-white/10 z-50">
       <div class="controls-left">
         <button 
           class="control-button"
@@ -141,41 +141,6 @@ const saveProject = () => {
 </template>
 
 <style scoped>
-.studio-wrapper {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  width: 100%;
-  position: relative;
-}
-
-.studio-container {
-  flex: 1;
-  min-height: 0; /* Permet au conteneur de rétrécir */
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 1rem;
-  padding-bottom: 80px; /* Hauteur du footer */
-  box-sizing: border-box;
-}
-
-.studio-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 80px;
-  background-color: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(10px);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 2rem;
-  z-index: 50; /* S'assure que le footer est au-dessus des autres éléments */
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
 
 .controls-left, .controls-center, .controls-right {
   display: flex;
