@@ -183,28 +183,57 @@ function cleanupVideoElements(elements: CanvasElement[]) {
 onUnmounted(() => cleanupVideoElements([]))
 
 // Observer les changements de taille du conteneur
-const resizeObserver = new ResizeObserver(updateCanvasSize)
-
-watch(canvasDimensions, () => {
-  updateCanvasSize()
+const resizeObserver = new ResizeObserver(() => {
+  // Utiliser requestAnimationFrame pour regrouper les mises à jour
+  requestAnimationFrame(() => {
+    updateCanvasSize()
+  })
 })
 
+// Ne pas surveiller canvasDimensions pour éviter les boucles
+// car updateCanvasSize() met à jour canvasDimensions
+
 onMounted(() => {
+  // Mettre à jour la taille initiale
   updateCanvasSize()
+  
+  // Observer les changements de taille du conteneur
   if (containerRef.value) {
     resizeObserver.observe(containerRef.value)
   }
-  window.addEventListener('resize', updateCanvasSize)
+  
+  // Ajouter l'écouteur de redimensionnement avec debounce
+  let resizeTimer: number
+  const handleResize = () => {
+    cancelAnimationFrame(resizeTimer)
+    resizeTimer = requestAnimationFrame(updateCanvasSize)
+  }
+  
+  window.addEventListener('resize', handleResize)
+  
+  // Démarrer la boucle de rendu
   drawCanvas()
+  
+  // Nettoyage
+  return () => {
+    window.removeEventListener('resize', handleResize)
+    cancelAnimationFrame(resizeTimer)
+  }
 })
 
 onUnmounted(() => {
+  // Nettoyer l'observer
   if (containerRef.value) {
     resizeObserver.unobserve(containerRef.value)
   }
-  window.removeEventListener('resize', updateCanvasSize)
   resizeObserver.disconnect()
-  if (animationFrame) cancelAnimationFrame(animationFrame)
+  
+  // Arrêter la boucle de rendu
+  if (animationFrame) {
+    cancelAnimationFrame(animationFrame)
+  }
+  
+  // Nettoyer les ressources vidéo
   cleanupVideoElements([])
 })
 
@@ -567,7 +596,7 @@ defineExpose({
     <!-- Canvas principal -->
     <canvas
       ref="canvasRef"
-      class="bg-black border border-gray-200 rounded-lg shadow-sm"
+      class="bg-black rounded-2xl shadow-sm"
       :style="{
         width: `${canvasDimensions.width}px`,
         height: `${canvasDimensions.height}px`,

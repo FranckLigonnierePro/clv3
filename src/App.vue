@@ -256,10 +256,14 @@ const notifications = computed(() => notificationsStore.notifications)
     <!-- Contenu principal avec Suspense pour le chargement asynchrone -->
     <RouterView v-slot="{ Component }">
       <Suspense>
-        <component :is="Component" v-if="!isLoading" />
-        <div v-else class="flex items-center justify-center min-h-screen">
-          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
+        <template #default>
+          <component :is="Component" v-if="!isLoading" />
+        </template>
+        <template #fallback>
+          <div class="flex items-center justify-center min-h-screen">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        </template>
       </Suspense>
     </RouterView>
   </div>

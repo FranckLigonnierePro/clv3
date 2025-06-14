@@ -26,7 +26,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-100 flex flex-col">
+  <div class="min-h-screen bg-black flex flex-col">
     <!-- Barre de navigation -->
     <AppNavbar v-if="showNavbar" />
     
