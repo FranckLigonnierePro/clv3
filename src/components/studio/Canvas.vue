@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
 export type CanvasElementType = 'camera' | 'image' | 'screen' | 'text' | 'video'
 
@@ -23,14 +23,21 @@ export interface CanvasElement {
   }
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   elements: CanvasElement[]
   format: '16:9' | '9:16'
   selectedElement: string | null
   snapEnabled: boolean
-  isLive: boolean
+  isLive?: boolean
   showGrid?: boolean
-}>()
+  gridSize?: number
+  gridColor?: string
+}>(), {
+  showGrid: true,
+  gridSize: 20,
+  gridColor: 'rgba(255, 255, 255, 0.1)',
+  isLive: false
+})
 
 const emit = defineEmits<{
   (e: 'element-select', id: string | null): void
@@ -39,6 +46,9 @@ const emit = defineEmits<{
   (e: 'element-delete', id: string): void
 }>()
 
+// Référence au conteneur parent
+const containerRef = ref<HTMLElement | null>(null)
+
 // Réf du canvas HTML réel
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
@@ -46,20 +56,30 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const cameraVideos = ref<Record<string, HTMLVideoElement>>({})
 const screenVideos = ref<Record<string, HTMLVideoElement>>({})
 
-// Référence au conteneur parent
-const containerRef = ref<HTMLElement | null>(null)
+// État du glisser-déposer
+const isDragging = ref(false)
+const draggedElement = ref<CanvasElement | null>(null)
+const dragStartX = ref(0)
+const dragStartY = ref(0)
+const elementStartX = ref(0)
+const elementStartY = ref(0)
 
-// Gère les dimensions du canvas en fonction du format et du conteneur
+// Dimensions du canvas
+const canvasDimensions = ref({
+  width: 800,  // Valeur par défaut
+  height: 450  // 16:9 par défaut
+})
+
+// Met à jour les dimensions du canvas en fonction du conteneur
 const updateCanvasSize = () => {
-  if (!canvasRef.value || !containerRef.value) return
+  if (!containerRef.value) return
   
-  const containerWidth = containerRef.value.clientWidth
-  const containerHeight = containerRef.value.clientHeight
-  const dpr = window.devicePixelRatio || 1
-
-  // Calcul des dimensions en fonction du format
-  let canvasWidth = containerWidth
-  let canvasHeight = containerHeight
+  const container = containerRef.value
+  const containerWidth = container.clientWidth
+  const containerHeight = container.clientHeight
+  
+  let width = containerWidth
+  let height = containerHeight
   let targetRatio = 16 / 9 // Par défaut 16:9
 
   if (props.format === '16:9') {
@@ -72,34 +92,51 @@ const updateCanvasSize = () => {
   
   if (currentRatio > targetRatio) {
     // Trop large, on ajuste la largeur
-    canvasWidth = containerHeight * targetRatio
+    width = containerHeight * targetRatio
   } else {
     // Trop haut, on ajuste la hauteur
-    canvasHeight = containerWidth / targetRatio
+    height = containerWidth / targetRatio
   }
   
-  // Mise à jour des dimensions du canvas
-  const canvas = canvasRef.value
-  const ctx = canvas.getContext('2d')
+  // Mettre à jour les dimensions
+  canvasDimensions.value = {
+    width: Math.floor(width),
+    height: Math.floor(height)
+  }
   
-  if (!ctx) return
-  
-  // Dimensions physiques (pixels réels)
-  const physicalWidth = Math.floor(canvasWidth * dpr)
-  const physicalHeight = Math.floor(canvasHeight * dpr)
-  
-  // Dimensions logiques (CSS)
-  canvas.width = physicalWidth
-  canvas.height = physicalHeight
-  canvas.style.width = `${canvasWidth}px`
-  canvas.style.height = `${canvasHeight}px`
-  
-  // Mise à jour de l'échelle du contexte
-  ctx.scale(dpr, dpr)
-  ctx.imageSmoothingEnabled = true
+  // Mettre à jour le canvas physique
+  updatePhysicalCanvas()
   
   // Redessiner le contenu
-  drawCanvas()
+  requestAnimationFrame(drawCanvas)
+}
+
+// Met à jour le canvas physique avec la bonne résolution
+const updatePhysicalCanvas = () => {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  
+  const dpr = window.devicePixelRatio || 1
+  const { width, height } = canvasDimensions.value
+  
+  // Dimensions physiques (pixels réels)
+  const physicalWidth = Math.floor(width * dpr)
+  const physicalHeight = Math.floor(height * dpr)
+  
+  // Mise à jour des dimensions physiques
+  canvas.width = physicalWidth
+  canvas.height = physicalHeight
+  
+  // Mise à jour des dimensions logiques (CSS)
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height}px`
+  
+  // Mise à jour du contexte
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.scale(dpr, dpr)
+    ctx.imageSmoothingEnabled = true
+  }
 }
 
 // Initialise les balises vidéo pour chaque stream unique (camera/screen)
@@ -145,22 +182,150 @@ function cleanupVideoElements(elements: CanvasElement[]) {
 }
 onUnmounted(() => cleanupVideoElements([]))
 
-// Définition des types
-interface CanvasDimensions {
-  width: number
-  height: number
+// Observer les changements de taille du conteneur
+const resizeObserver = new ResizeObserver(updateCanvasSize)
+
+watch(canvasDimensions, () => {
+  updateCanvasSize()
+})
+
+onMounted(() => {
+  updateCanvasSize()
+  if (containerRef.value) {
+    resizeObserver.observe(containerRef.value)
+  }
+  window.addEventListener('resize', updateCanvasSize)
+  drawCanvas()
+})
+
+onUnmounted(() => {
+  if (containerRef.value) {
+    resizeObserver.unobserve(containerRef.value)
+  }
+  window.removeEventListener('resize', updateCanvasSize)
+  resizeObserver.disconnect()
+  if (animationFrame) cancelAnimationFrame(animationFrame)
+  cleanupVideoElements([])
+})
+
+// Dessin du canvas à chaque frame
+let animationFrame: number
+
+// Fonction pour dessiner la grille
+const drawGrid = (ctx: CanvasRenderingContext2D) => {
+  if (!props.showGrid) return
+  
+  const { width, height } = canvasDimensions.value
+  const size = props.gridSize || 20
+  const color = props.gridColor || 'rgba(255, 255, 255, 0.1)'
+  
+  ctx.save()
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1
+  
+  // Lignes verticales
+  for (let x = 0; x <= width; x += size) {
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, height)
+    ctx.stroke()
+  }
+  
+  // Lignes horizontales
+  for (let y = 0; y <= height; y += size) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(width, y)
+    ctx.stroke()
+  }
+  
+  ctx.restore()
 }
 
-// Références réactives pour l'état du canvas
-const canvasDimensions = ref<CanvasDimensions>({ width: 0, height: 0 })
-const isDragging = ref(false)
-const draggedElement = ref<CanvasElement | null>(null)
-const dragStartX = ref(0)
-const dragStartY = ref(0)
-const elementStartX = ref(0)
-const elementStartY = ref(0)
-const isResizing = ref(false)
-const resizeHandle = ref('')
+function drawCanvas() {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  // Mettre à jour la taille du canvas si nécessaire
+  const { width, height } = canvasDimensions.value
+  const dpr = window.devicePixelRatio || 1
+  
+  // Dimensions physiques (pixels réels)
+  const physicalWidth = Math.floor(width * dpr)
+  const physicalHeight = Math.floor(height * dpr)
+  
+  // Mettre à jour les dimensions du canvas
+  if (canvas.width !== physicalWidth || canvas.height !== physicalHeight) {
+    canvas.width = physicalWidth
+    canvas.height = physicalHeight
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+    ctx.scale(dpr, dpr)
+  }
+
+  // Sauvegarder l'état du contexte
+  ctx.save()
+  
+  // Effacer le canvas
+  ctx.clearRect(0, 0, width, height)
+  
+  // Dessiner un fond noir
+  ctx.fillStyle = '#1a1a1a'
+  ctx.fillRect(0, 0, width, height)
+  
+  // Dessiner la grille si activée
+  drawGrid(ctx)
+  
+  // Restaurer l'état du contexte
+  ctx.restore()
+
+  props.elements.forEach(element => {
+    ctx.save()
+    ctx.translate(element.x + element.width/2, element.y + element.height/2)
+    // Rotation (optionnelle)
+    // ctx.rotate((element.rotation || 0) * Math.PI/180)
+
+    switch (element.type) {
+      case 'camera': {
+        const v = cameraVideos.value[element.id]
+        if (v && v.readyState >= 2) {
+          ctx.drawImage(v, -element.width/2, -element.height/2, element.width, element.height)
+        }
+        break
+      }
+      case 'screen': {
+        const v = screenVideos.value[element.id]
+        if (v && v.readyState >= 2) {
+          ctx.drawImage(v, -element.width/2, -element.height/2, element.width, element.height)
+        }
+        break
+      }
+      case 'image': {
+        if (element.data?.src) {
+          // Images mises en cache (optimisation possible)
+          const img = new window.Image()
+          img.src = element.data.src
+          ctx.drawImage(img, -element.width/2, -element.height/2, element.width, element.height)
+        }
+        break
+      }
+      case 'text': {
+        ctx.fillStyle = element.data?.color || 'white'
+        ctx.font = `${element.data?.fontSize || 24}px Arial`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(element.data?.content || '', 0, 0, element.width)
+        break
+      }
+    }
+    ctx.restore()
+  })
+
+  animationFrame = requestAnimationFrame(drawCanvas)
+}
 
 // État pour l'édition de texte
 const editingText = ref<{
@@ -225,7 +390,13 @@ function handleMouseMove(e: MouseEvent) {
   const newY = Math.max(0, Math.round((elementStartY.value + dy) / snapSize) * snapSize)
   
   // Émettre la mise à jour
-  emit('element-update', draggedElement.value.id, { x: newX, y: newY })
+  if (draggedElement.value) {
+    emit('element-update', {
+      ...draggedElement.value,
+      x: newX,
+      y: newY
+    })
+  }
 }
 
 function handleMouseUp(e: MouseEvent) {
@@ -265,13 +436,20 @@ function handleMouseUp(e: MouseEvent) {
 function saveTextEdit() {
   if (!editingText.value) return
   
-  emit('element-update', editingText.value.elementId, {
+  const element = props.elements.find(el => el.id === editingText.value?.elementId)
+  if (!element) return
+  
+  const updatedElement = {
+    ...element,
     data: {
+      ...element.data,
       content: editingText.value.content,
       color: editingText.value.color,
       fontSize: editingText.value.fontSize
     }
-  })
+  }
+  
+  emit('element-update', updatedElement)
   
   // Si le contenu est vide, on supprime l'élément
   if (!editingText.value.content.trim()) {
@@ -283,225 +461,93 @@ function saveTextEdit() {
 
 // Supprimer un élément
 const handleDeleteElement = (elementId: string) => {
-  const index = props.elements.findIndex(el => el.id === elementId)
-  if (index !== -1) {
-    const [deleted] = props.elements.splice(index, 1)
-    drawCanvas()
-    emit('element-delete', deleted)
-  }
+  emit('element-delete', elementId)
 }
 
 // Annuler l'édition
-function cancelTextEdit() {
+const cancelTextEdit = () => {
   editingText.value = null
 }
 
 // Gestion des événements tactiles
 function handleTouchStart(e: TouchEvent) {
-  if (!canvasRef.value || props.isLive) return
+  if (!canvasRef.value) return
   
   const touch = e.touches[0]
   const rect = canvasRef.value.getBoundingClientRect()
   const x = touch.clientX - rect.left
   const y = touch.clientY - rect.top
   
-  // Vérifier si on a touché un élément
-  for (let i = props.elements.length - 1; i >= 0; i--) {
-    const el = props.elements[i]
-    if (el.locked) continue
+  // Trouver l'élément touché
+  const element = findElementAt(x, y)
+  if (element) {
+    isDragging.value = true
+    draggedElement.value = element
+    dragStartX.value = x
+    dragStartY.value = y
+    elementStartX.value = element.x
+    elementStartY.value = element.y
     
-    if (
-      x >= el.x && 
-      x <= el.x + el.width && 
-      y >= el.y && 
-      y <= el.y + el.height
-    ) {
-      isDragging = true
-      draggedElement = { ...el }
-      dragStartX = x
-      dragStartY = y
-      elementStartX = el.x
-      elementStartY = el.y
-      emit('element-select', el.id)
-      e.preventDefault()
-      break
-    }
+    // Éviter le défilement de la page
+    e.preventDefault()
+  } else {
+    emit('element-select', null)
   }
 }
 
 function handleTouchMove(e: TouchEvent) {
-  if (!isDragging || !draggedElement || !canvasRef.value) return
+  if (!isDragging.value || !draggedElement.value || !canvasRef.value) return
   
   const touch = e.touches[0]
   const rect = canvasRef.value.getBoundingClientRect()
   const x = touch.clientX - rect.left
   const y = touch.clientY - rect.top
   
-  // Calculer le déplacement
-  const dx = x - dragStartX
-  const dy = y - dragStartY
+  // Mettre à jour la position de l'élément
+  const dx = x - dragStartX.value
+  const dy = y - dragStartY.value
   
   // Mettre à jour la position de l'élément avec snap si activé
   const snapSize = props.snapEnabled ? 10 : 1
-  const newX = Math.max(0, Math.round((elementStartX + dx) / snapSize) * snapSize)
-  const newY = Math.max(0, Math.round((elementStartY + dy) / snapSize) * snapSize)
+  const newX = Math.max(0, Math.round((elementStartX.value + dx) / snapSize) * snapSize)
+  const newY = Math.max(0, Math.round((elementStartY.value + dy) / snapSize) * snapSize)
+  
+  // Mettre à jour l'élément
+  draggedElement.value.x = newX
+  draggedElement.value.y = newY
   
   // Émettre la mise à jour
-  emit('element-update', draggedElement.id, { x: newX, y: newY })
+  emit('element-update', draggedElement.value)
   e.preventDefault()
 }
 
 function handleTouchEnd() {
-  isDragging = false
-  draggedElement = null
+  isDragging.value = false
+  draggedElement.value = null
 }
 
-// Redessiner le canvas quand les dimensions changent
-watch(canvasDimensions, () => {
-  updateCanvasSize()
-})
-
-// Observer les changements de taille du conteneur
-const resizeObserver = new ResizeObserver(() => {
-  // Le computed canvasDimensions se mettra à jour automatiquement
-  // ce qui déclenchera le watcher ci-dessus
-})
-
-onMounted(() => {
-  if (containerRef.value) {
-    resizeObserver.observe(containerRef.value)
-  }
-  drawCanvas()
-})
-
-onUnmounted(() => {
-  resizeObserver.disconnect()
-  cancelAnimationFrame(animationFrame)
-  cleanupVideoElements([])
-})
-
-// Dessin du canvas à chaque frame
-let animationFrame: number
-
-function drawGrid(ctx: CanvasRenderingContext2D) {
-  if (!props.showGrid) return
-  
-  const { width, height } = canvasDimensions.value
-  const gridSize = 20
-  const lineColor = 'rgba(255, 255, 255, 0.1)'
-  
-  ctx.strokeStyle = lineColor
-  ctx.lineWidth = 1
-  
-  // Lignes verticales
-  for (let x = 0; x <= width; x += gridSize) {
-    ctx.beginPath()
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, height)
-    ctx.stroke()
-  }
-  
-  // Lignes horizontales
-  for (let y = 0; y <= height; y += gridSize) {
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(width, y)
-    ctx.stroke()
-  }
-}
-
-function drawCanvas() {
-  console.log('drawCanvas called')
-  const canvas = canvasRef.value
-  if (!canvas) {
-    console.error('Canvas element not found')
-    return
-  }
-  
-  const ctx = canvas.getContext('2d')
-  if (!ctx) {
-    console.error('Could not get 2D context')
-    return
-  }
-  
-  // Mettre à jour la taille du canvas si nécessaire
-  if (canvas.width !== canvasDimensions.value.width || canvas.height !== canvasDimensions.value.height) {
-    canvas.width = canvasDimensions.value.width
-    canvas.height = canvasDimensions.value.height
-  }
-
-  // Sauvegarder l'état du contexte
-  ctx.save()
-  
-  // Effacer le canvas
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  
-  // Dessiner un fond noir
-  ctx.fillStyle = 'black'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  
-  // Dessiner la grille si activée
-  drawGrid(ctx)
-  
-  // Restaurer l'état du contexte
-  ctx.restore()
-
-  props.elements.forEach(element => {
-    ctx.save()
-    ctx.translate(element.x + element.width/2, element.y + element.height/2)
-    // Rotation (optionnelle)
-    // ctx.rotate((element.rotation || 0) * Math.PI/180)
-
-    switch (element.type) {
-      case 'camera': {
-        const v = cameraVideos.value[element.id]
-        if (v && v.readyState >= 2) {
-          ctx.drawImage(v, -element.width/2, -element.height/2, element.width, element.height)
-        }
-        break
-      }
-      case 'screen': {
-        const v = screenVideos.value[element.id]
-        if (v && v.readyState >= 2) {
-          ctx.drawImage(v, -element.width/2, -element.height/2, element.width, element.height)
-        }
-        break
-      }
-      case 'image': {
-        if (element.data?.src) {
-          // Images mises en cache (optimisation possible)
-          const img = new window.Image()
-          img.src = element.data.src
-          ctx.drawImage(img, -element.width/2, -element.height/2, element.width, element.height)
-        }
-        break
-      }
-      case 'text': {
-        ctx.fillStyle = element.data?.color || 'white'
-        ctx.font = `${element.data?.fontSize || 24}px Arial`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(element.data?.content || '', 0, 0, element.width)
-        break
-      }
+// Fonction utilitaire pour trouver un élément aux coordonnées données
+function findElementAt(x: number, y: number): CanvasElement | null {
+  // Parcourir les éléments dans l'ordre inverse (du dernier au premier)
+  for (let i = props.elements.length - 1; i >= 0; i--) {
+    const element = props.elements[i]
+    if (
+      x >= element.x &&
+      x <= element.x + element.width &&
+      y >= element.y &&
+      y <= element.y + element.height
+    ) {
+      return element
     }
-    ctx.restore()
-  })
-
-  animationFrame = requestAnimationFrame(drawCanvas)
+  }
+  return null
 }
 
-onMounted(() => {
-  console.log('Canvas component mounted')
-  updateCanvasSize()
-  window.addEventListener('resize', updateCanvasSize)
-  drawCanvas()
-  console.log('Canvas draw called')
-})
-onUnmounted(() => {
-  if (animationFrame) cancelAnimationFrame(animationFrame)
-  window.removeEventListener('resize', updateCanvasSize)
-})
+// Définition des types
+interface CanvasDimensions {
+  width: number
+  height: number
+}
 
 // Expose la méthode getCanvas (pour .captureStream())
 defineExpose({
@@ -564,19 +610,30 @@ defineExpose({
             class="h-8 w-8 cursor-pointer"
           />
         </div>
-        <div class="flex justify-end space-x-2">
+        <div class="flex justify-between items-center">
           <button
-            @click="cancelTextEdit"
-            class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+            @click.stop="handleDeleteElement(editingText.elementId)"
+            class="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded text-white"
+            title="Supprimer l'élément"
           >
-            Annuler
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
           </button>
-          <button
-            @click="saveTextEdit"
-            class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded"
-          >
-            Valider
-          </button>
+          <div class="space-x-2">
+            <button
+              @click.stop="cancelTextEdit"
+              class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+            >
+              Annuler
+            </button>
+            <button
+              @click.stop="saveTextEdit"
+              class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded"
+            >
+              Valider
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -26,24 +26,46 @@ interface CanvasElement {
 const elements = ref<CanvasElement[]>([])
 // Format du canvas (16:9 ou 9:16)
 const format = ref<'16:9' | '9:16'>('16:9')
+// Contrôles de la grille
+const showGrid = ref(true)
+const gridSize = ref(20)
+const gridColor = ref('rgba(255, 255, 255, 0.1)')
+
+// Fonction pour basculer l'affichage de la grille
+const toggleGrid = () => {
+  showGrid.value = !showGrid.value
+}
 </script>
 
 <template>
   <div class="flex-1 flex items-center justify-center p-4">
     <div class="relative" style="width: 80%; max-width: 1200px; aspect-ratio: 16/9;">
       <!-- Canvas principal -->
-      <Canvas 
-        :elements="elements" 
-        :format="format"
-        :selected-element="null"
-        :snap-enabled="false"
-        :is-live="false"
-        :show-grid="false"
-        @element-select="() => {}"
-        @element-update="() => {}"
-        @element-delete="() => {}"
-        class="w-full h-full"
-      />
+      <div class="relative w-full h-full">
+        <div class="absolute top-4 left-4 z-10 flex gap-2">
+          <button 
+            @click="toggleGrid" 
+            class="px-3 py-1 bg-gray-800 bg-opacity-70 text-white rounded-md hover:bg-opacity-100 transition-all"
+            :class="{ 'bg-blue-600': showGrid }"
+          >
+            Grille
+          </button>
+        </div>
+        <Canvas 
+          :elements="elements" 
+          :format="format"
+          :selected-element="null"
+          :snap-enabled="false"
+          :is-live="false"
+          :show-grid="showGrid"
+          :grid-size="gridSize"
+          :grid-color="gridColor"
+          @element-select="() => {}"
+          @element-update="() => {}"
+          @element-delete="() => {}"
+          class="w-full h-full"
+        />
+      </div>
     </div>
   </div>
 </template>
