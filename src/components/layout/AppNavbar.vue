@@ -17,11 +17,6 @@ const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value
 }
 
-const navigateTo = (path: string) => {
-  router.push(path)
-  isMobileMenuOpen.value = false
-}
-
 const handleLogout = async () => {
   try {
     // First navigate to landing page
@@ -45,23 +40,11 @@ const navItems = [
     activeRoutes: ['dashboard']
   },
   { 
-    name: 'Nouveau projet', 
+    name: 'Le Studio', 
     to: { name: 'studio', params: { id: 'new' } }, 
-    icon: Plus,
-    activeRoutes: ['studio']
-  },
-  { 
-    name: 'Mes vidéos', 
-    to: { name: 'dashboard' }, 
     icon: Video,
-    activeRoutes: ['dashboard']
-  },
-  // { 
-  //   name: 'Rechercher', 
-  //   to: { name: 'search' }, 
-  //   icon: Search,
-  //   activeRoutes: ['search']
-  // } // Uncomment when search is implemented
+    activeRoutes: ['studio']
+  }
 ]
 
 const userMenuItems = [
@@ -79,7 +62,7 @@ const isActive = (item: { activeRoutes?: string[] }) => {
 </script>
 
 <template>
-  <nav class="bg-white shadow-sm border-b border-gray-200">
+  <nav class="bg-black shadow-sm border-b border-gray-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16">
         <!-- Logo et navigation principale -->
@@ -98,7 +81,7 @@ const isActive = (item: { activeRoutes?: string[] }) => {
               :to="item.to"
               class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
               :class="{
-                'border-indigo-500 text-gray-900': isActive(item),
+                'border-indigo-500 text-white': isActive(item),
                 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700': !isActive(item),
                 'ml-4': item.name !== 'Accueil'
               }"
@@ -287,9 +270,3 @@ const isActive = (item: { activeRoutes?: string[] }) => {
     </div>
   </nav>
 </template>
-
-<style scoped>
-.router-link-active {
-  @apply border-indigo-500 text-gray-900;
-}
-</style>

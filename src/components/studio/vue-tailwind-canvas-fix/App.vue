@@ -269,11 +269,17 @@ const notifications = computed(() => notificationsStore.notifications)
   </div>
 </template>
 
+<style scoped>
+#app {
+  min-height: 100vh;
+}
+</style>
 <style>
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 html, body, #app {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  overflow: hidden;
+  @apply m-0 p-0 h-full overflow-hidden;
 }
 </style>

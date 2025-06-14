@@ -26,25 +26,22 @@ onMounted(() => {
 </script>
 
 <template>
+  <div class="h-full w-full flex flex-col overflow-hidden">
   <div class="min-h-screen bg-zinc-950 flex flex-col">
     <!-- Barre de navigation -->
     <AppNavbar v-if="showNavbar" />
     
     <!-- Contenu principal -->
-    <main class="flex-1">
-      <div class="main-layout">
-      <RouterView />
-    </div>
+    <main class="flex-1 p-4">
+      <div class="max-w-7xl mx-auto w-full">
+        <!-- RouterView pour le rendu des vues imbriquées -->
+            <RouterView />
+  </div>
+      </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-.main-layout {
-  height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+/* Styles spécifiques au layout */
 </style>

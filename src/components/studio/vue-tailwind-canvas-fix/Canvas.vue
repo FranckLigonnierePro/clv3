@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
 export type CanvasElementType = 'camera' | 'image' | 'screen' | 'text' | 'video'
 
@@ -72,26 +72,34 @@ const canvasDimensions = ref({
 
 // Met à jour les dimensions du canvas en fonction du conteneur
 const updateCanvasSize = () => {
-  const padding = 32
-  const screenWidth = window.innerWidth - padding
-  const screenHeight = window.innerHeight - padding
+  if (!containerRef.value) return
 
-  const targetRatio = props.format === '9:16' ? 9 / 16 : 16 / 9
+  const container = containerRef.value
+  const containerWidth = container.clientWidth
+  const containerHeight = container.clientHeight
 
-  let width = screenWidth
-  let height = screenWidth / targetRatio
+  // Choix du ratio selon le format demandé
+  let targetRatio = props.format === '9:16' ? 9 / 16 : 16 / 9
 
-  if (height > screenHeight) {
-    height = screenHeight
+  let width = containerWidth
+  let height = containerWidth / targetRatio
+
+  // Si le canvas est trop haut pour son conteneur, on adapte en hauteur
+  if (height > containerHeight) {
+    height = containerHeight
     width = height * targetRatio
   }
 
+  // Mise à jour des dimensions (arrondies)
   canvasDimensions.value = {
     width: Math.floor(width),
-    height: Math.floor(height),
+    height: Math.floor(height)
   }
 
+  // Mise à jour du canvas physique
   updatePhysicalCanvas()
+
+  // Redessiner le canvas
   requestAnimationFrame(drawCanvas)
 }
 
@@ -181,18 +189,37 @@ onMounted(() => {
   // Mettre à jour la taille initiale
   updateCanvasSize()
   
-  window.addEventListener('resize', updateCanvasSize)
+  // Observer les changements de taille du conteneur
+  if (containerRef.value) {
+    resizeObserver.observe(containerRef.value)
+  }
+  
+  // Ajouter l'écouteur de redimensionnement avec debounce
+  let resizeTimer: number
+  const handleResize = () => {
+    cancelAnimationFrame(resizeTimer)
+    resizeTimer = requestAnimationFrame(updateCanvasSize)
+  }
+  
+  window.addEventListener('resize', handleResize)
   
   // Démarrer la boucle de rendu
   drawCanvas()
-
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateCanvasSize)
+  
+  // Nettoyage
+  return () => {
+    window.removeEventListener('resize', handleResize)
+    cancelAnimationFrame(resizeTimer)
+  }
 })
 
 onUnmounted(() => {
+  // Nettoyer l'observer
+  if (containerRef.value) {
+    resizeObserver.unobserve(containerRef.value)
+  }
+  resizeObserver.disconnect()
+  
   // Arrêter la boucle de rendu
   if (animationFrame) {
     cancelAnimationFrame(animationFrame)
@@ -557,7 +584,8 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="containerRef" class="relative w-full h-full flex items-center justify-center p-4">
+  <canvas ref="canvasRef" class="block" />
+  <div ref="containerRef" class="relative w-full h-full flex items-center justify-center">
     <!-- Canvas principal -->
     <canvas
       ref="canvasRef"
