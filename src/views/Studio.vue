@@ -104,8 +104,8 @@ const handleElementDelete = (id: string) => {
 const format = ref<'16:9' | '9:16'>('16:9')
 // Contrôles de la grille
 const showGrid = ref(true)
-const gridSize = ref(40) // Augmenté de 20 à 40 pour des mailles plus grandes
-const gridColor = ref('rgba(255, 255, 255, 0.1)')
+const gridSize = ref(40) // Taille de la grille en pixels
+const gridColor = ref('rgba(255, 255, 255, 0.1)') // Couleur de la grille
 // selectedElement est maintenant défini plus haut
 const snapEnabled = ref(true)
 
@@ -138,6 +138,11 @@ const toggleCamera = () => {
 
 // UI State
 const showLeftPanel = ref(true)
+
+// Fonction pour basculer l'affichage de la grille
+const toggleGrid = () => {
+  showGrid.value = !showGrid.value
+}
 const showChat = ref(false)
 const messages = ref<Array<{id: string, text: string, sender: string, time: string}>>([])
 const newMessage = ref('')
@@ -219,17 +224,19 @@ const addShapeElement = (shape: 'rectangle' | 'circle') => {
       :show-panel="showLeftPanel"
       :elements="elements"
       :selected-element="selectedElement"
+      :show-grid="showGrid"
       @add-text="addTextElement"
       @add-image="addImageElement"
       @add-video="addVideoElement"
       @add-shape="addShapeElement"
       @select-element="handleElementSelect"
+      @toggle-grid="showGrid = !showGrid"
     />
     
     <!-- Main content -->
-    <div class="flex-1 flex flex-col h-full overflow-hidden ml-0 transition-all duration-300" 
-         :class="{ 'md:ml-64': showLeftPanel }">
+    <div class="flex-1 flex flex-col h-full overflow-hidden ml-0 transition-all duration-300">
     <div class="canvas-container flex justify-center items-center p-4 min-h-0 overflow-hidden w-full">
+
       <Canvas 
         ref="canvasRef"
         :elements="elements"
