@@ -38,8 +38,8 @@ const toggleGrid = () => {
 </script>
 
 <template>
-  <div class="flex-1 flex items-center justify-center p-4">
-    <div class="relative" style="width: 80%; max-width: 1200px; aspect-ratio: 16/9;">
+  <div class="flex-1 flex items-center justify-center">
+    <div class="relative" style="width: 100%; max-width: 1200px; aspect-ratio: 16/9;">
       <!-- Canvas principal -->
       <div class="relative w-full h-full">
         <div class="absolute top-4 left-4 z-10 flex gap-2">
