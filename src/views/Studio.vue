@@ -1,26 +1,71 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import Canvas from '../components/studio/Canvas.vue'
-import { Mic, MicOff, Video, VideoOff, Circle, CircleDot, Save } from 'lucide-vue-next'
+import LeftPanel from '../components/studio/LeftPanel.vue'
+import ChatSidebar from '../components/studio/ChatSidebar.vue'
+import { Mic, MicOff, Video, VideoOff, Circle, CircleDot, Save, MessageSquare } from 'lucide-vue-next'
+import type { CanvasElement } from '../components/studio/Canvas.vue'
 
 onMounted(() => {
   console.log('Studio component mounted')
 })
 
-// Déclaration des types
-type CanvasElementType = 'text' | 'camera' | 'image' | 'screen' | 'video'
+// Type d'élément de canvas
 
-interface CanvasElement {
-  id: string
-  type: CanvasElementType
-  x: number
-  y: number
-  width: number
-  height: number
-  locked: boolean
-  data: any
-  visible?: boolean
-  rotation?: number
+// Références au canvas
+const containerRef = ref<HTMLElement | null>(null)
+const canvasDimensions = ref({ width: 1280, height: 720 }) // Valeurs par défaut
+
+// Mettre à jour les dimensions du canvas après le montage
+onMounted(() => {
+  updateCanvasDimensions()
+  window.addEventListener('resize', updateCanvasDimensions)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateCanvasDimensions)
+})
+
+const updateCanvasDimensions = () => {
+  if (containerRef.value) {
+    const container = containerRef.value.querySelector('.canvas-container')
+    if (container) {
+      canvasDimensions.value = {
+        width: container.clientWidth,
+        height: container.clientHeight
+      }
+    }
+  }
+}
+
+// Fonction utilitaire pour créer un nouvel élément texte centré
+const createTextElement = (): CanvasElement => {
+  // Calculer la position pour centrer le texte
+  const gridCellSize = gridSize.value
+  const textWidth = gridCellSize * 5 // Largeur de 5 cellules
+  const textHeight = gridCellSize // Hauteur d'une cellule
+  
+  return {
+    id: `text-${Date.now()}`,
+    type: 'text',
+    x: Math.round((canvasDimensions.value.width - textWidth) / 2 / gridCellSize) * gridCellSize,
+    y: Math.round((canvasDimensions.value.height - textHeight) / 2 / gridCellSize) * gridCellSize,
+    width: textWidth,
+    height: textHeight,
+    rotation: 0,
+    locked: false,
+    visible: true,
+    data: {
+      content: 'Nouveau texte',
+      color: '#ffffff',
+      fontSize: gridCellSize * 0.6, // Taille de police proportionnelle à la grille
+      fontFamily: 'Arial',
+      textAlign: 'center',
+      bold: false,
+      italic: false,
+      underline: false
+    }
+  }
 }
 
 // Références
@@ -28,13 +73,40 @@ const canvasRef = ref<InstanceType<typeof Canvas> | null>(null)
 
 // Éléments du canvas
 const elements = ref<CanvasElement[]>([])
+const selectedElement = ref<string | undefined>(undefined)
+
+// Fonction pour mettre à jour un élément
+const updateElement = (updatedElement: CanvasElement) => {
+  const index = elements.value.findIndex(el => el.id === updatedElement.id)
+  if (index !== -1) {
+    const newElements = [...elements.value]
+    newElements[index] = updatedElement
+    elements.value = newElements
+  }
+}
+
+// Gestion des événements du canvas
+const handleElementSelect = (id: string | undefined) => {
+  selectedElement.value = id
+}
+
+const handleElementUpdate = (element: CanvasElement) => {
+  updateElement(element)
+}
+
+const handleElementDelete = (id: string) => {
+  elements.value = elements.value.filter(el => el.id !== id)
+  if (selectedElement.value === id) {
+    selectedElement.value = undefined
+  }
+}
 // Format du canvas (16:9 ou 9:16)
 const format = ref<'16:9' | '9:16'>('16:9')
 // Contrôles de la grille
 const showGrid = ref(true)
 const gridSize = ref(40) // Augmenté de 20 à 40 pour des mailles plus grandes
 const gridColor = ref('rgba(255, 255, 255, 0.1)')
-const selectedElement = ref<string | null>(null)
+// selectedElement est maintenant défini plus haut
 const snapEnabled = ref(true)
 
 // États des contrôles
@@ -64,15 +136,100 @@ const toggleCamera = () => {
   // Ajouter ici la logique pour activer/désactiver la caméra
 }
 
+// UI State
+const showLeftPanel = ref(true)
+const showChat = ref(false)
+const messages = ref<Array<{id: string, text: string, sender: string, time: string}>>([])
+const newMessage = ref('')
+
+const toggleChat = () => {
+  showChat.value = !showChat.value
+}
+
+const sendMessage = () => {
+  if (newMessage.value.trim()) {
+    messages.value.push({
+      id: Date.now().toString(),
+      text: newMessage.value,
+      sender: 'user',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    })
+    newMessage.value = ''
+    
+    // Auto-scroll to bottom
+    setTimeout(() => {
+      const chatContainer = document.querySelector('.chat-messages')
+      if (chatContainer) {
+        chatContainer.scrollTop = chatContainer.scrollHeight
+      }
+    }, 100)
+  }
+}
+
 const saveProject = () => {
   // Ajouter ici la logique pour sauvegarder le projet
   console.log('Projet enregistré')
 }
+
+
+// Add element functions
+const addTextElement = () => {
+  const newElement = createTextElement()
+  elements.value = [...elements.value, newElement]
+  selectedElement.value = newElement.id
+}
+
+const addImageElement = () => {
+  // TODO: Implement image upload
+  console.log('Add image element')
+}
+
+const addVideoElement = () => {
+  // TODO: Implement video upload
+  console.log('Add video element')
+}
+
+const addShapeElement = (shape: 'rectangle' | 'circle') => {
+  const newElement: CanvasElement = {
+    id: `${shape}-${Date.now()}`,
+    type: 'shape',
+    x: 100,
+    y: 100,
+    width: 150,
+    height: 150,
+    rotation: 0,
+    locked: false,
+    data: {
+      shape,
+      fill: '#3b82f6',
+      stroke: '#1d4ed8',
+      strokeWidth: 2,
+      opacity: 1
+    }
+  }
+  elements.value = [...elements.value, newElement]
+  selectedElement.value = newElement.id
+}
 </script>
 
 <template>
-  <div class="grid grid-rows-[1fr_auto] h-[calc(100%-80px)] w-full">
-    <div class="flex justify-center items-center p-4 min-h-0 overflow-hidden w-full">
+  <div ref="containerRef" class="flex h-[calc(100%-80px)] w-full relative">
+    <!-- Left Panel -->
+    <LeftPanel 
+      :show-panel="showLeftPanel"
+      :elements="elements"
+      :selected-element="selectedElement"
+      @add-text="addTextElement"
+      @add-image="addImageElement"
+      @add-video="addVideoElement"
+      @add-shape="addShapeElement"
+      @select-element="handleElementSelect"
+    />
+    
+    <!-- Main content -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden ml-0 transition-all duration-300" 
+         :class="{ 'md:ml-64': showLeftPanel }">
+    <div class="canvas-container flex justify-center items-center p-4 min-h-0 overflow-hidden w-full">
       <Canvas 
         ref="canvasRef"
         :elements="elements"
@@ -83,8 +240,20 @@ const saveProject = () => {
         :selected-element="selectedElement"
         :snap-enabled="snapEnabled"
         :is-live="isLive"
+        @element-select="handleElementSelect"
+        @element-update="handleElementUpdate"
+        @element-delete="handleElementDelete"
       />
     </div>
+    </div>
+    
+    <!-- Chat Sidebar -->
+    <ChatSidebar
+      :show-chat="showChat"
+      :messages="messages"
+      @toggle-chat="toggleChat"
+      @send-message="sendMessage"
+    />
     
     <footer class="fixed bottom-0 w-full h-20 bg-zinc-950 backdrop-blur flex justify-between items-center px-8 z-50">
       <div class="controls-left">
@@ -127,7 +296,17 @@ const saveProject = () => {
         </button>
       </div>
       
-      <div class="controls-right">
+      <div class="controls-right flex items-center gap-4">
+        <button 
+          class="control-button relative"
+          @click="toggleChat"
+          title="Ouvrir le chat"
+        >
+          <MessageSquare class="w-5 h-5" />
+          <span v-if="messages.length > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+            {{ messages.length }}
+          </span>
+        </button>
         <button 
           class="control-button"
           @click="saveProject"
@@ -141,11 +320,58 @@ const saveProject = () => {
 </template>
 
 <style scoped>
+.chat-messages {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 #27272a;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #27272a;
+  border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background-color: #3f3f46;
+  border-radius: 3px;
+}
 
 .controls-left, .controls-center, .controls-right {
   display: flex;
   gap: 1rem;
   align-items: center;
+}
+
+/* Chat styles */
+.chat-messages {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 #1f2937;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background-color: #3f3f46;
+  border-radius: 3px;
+}
+
+/* Animation for chat messages */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-messages > div {
+  animation: fadeIn 0.2s ease-out forwards;
 }
 
 .controls-center {

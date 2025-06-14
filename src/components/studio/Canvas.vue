@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, onBeforeUnmount } from 'vue'
 
-export type CanvasElementType = 'camera' | 'image' | 'screen' | 'text' | 'video'
+export type CanvasElementType = 'camera' | 'image' | 'screen' | 'text' | 'video' | 'shape'
 
 export interface CanvasElement {
   id: string
@@ -19,6 +19,12 @@ export interface CanvasElement {
     content?: string
     color?: string
     fontSize?: number
+    fontFamily?: string
+    textAlign?: string
+    bold?: boolean
+    italic?: boolean
+    underline?: boolean
+    shape?: 'rectangle' | 'circle' | 'triangle'
     [key: string]: any
   }
 }
@@ -26,7 +32,7 @@ export interface CanvasElement {
 const props = withDefaults(defineProps<{
   elements: CanvasElement[]
   format: '16:9' | '9:16'
-  selectedElement: string | null
+  selectedElement: string | undefined
   snapEnabled: boolean
   isLive?: boolean
   showGrid?: boolean
@@ -40,7 +46,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  (e: 'element-select', id: string | null): void
+  (e: 'element-select', id: string | undefined): void
   (e: 'element-update', element: CanvasElement): void
   (e: 'element-edit', element: CanvasElement): void
   (e: 'element-delete', id: string): void
@@ -166,13 +172,7 @@ function cleanupVideoElements(elements: CanvasElement[]) {
 }
 onUnmounted(() => cleanupVideoElements([]))
 
-// Observer les changements de taille du conteneur
-const resizeObserver = new ResizeObserver(() => {
-  // Utiliser requestAnimationFrame pour regrouper les mises à jour
-  requestAnimationFrame(() => {
-    updateCanvasSize()
-  })
-})
+// L'observer de redimensionnement est maintenant géré dans onMounted
 
 // Ne pas surveiller canvasDimensions pour éviter les boucles
 // car updateCanvasSize() met à jour canvasDimensions
@@ -509,7 +509,7 @@ function handleTouchStart(e: TouchEvent) {
     // Éviter le défilement de la page
     e.preventDefault()
   } else {
-    emit('element-select', null)
+    emit('element-select', undefined)
   }
 }
 
@@ -561,11 +561,7 @@ function findElementAt(x: number, y: number): CanvasElement | null {
   return null
 }
 
-// Définition des types
-interface CanvasDimensions {
-  width: number
-  height: number
-}
+// Les types sont maintenant définis dans les interfaces en haut du fichier
 
 // Expose la méthode getCanvas (pour .captureStream())
 defineExpose({
@@ -661,11 +657,11 @@ defineExpose({
       v-if="selectedElement && !isLive"
       class="absolute border-2 border-blue-400 pointer-events-none"
       :style="{
-        left: `${selectedElement.x}px`,
-        top: `${selectedElement.y}px`,
-        width: `${selectedElement.width}px`,
-        height: `${selectedElement.height}px`,
-        transform: `rotate(${selectedElement.rotation || 0}deg)`
+        left: `${props.elements.find(el => el.id === selectedElement)?.x}px`,
+        top: `${props.elements.find(el => el.id === selectedElement)?.y}px`,
+        width: `${props.elements.find(el => el.id === selectedElement)?.width}px`,
+        height: `${props.elements.find(el => el.id === selectedElement)?.height}px`,
+        transform: `rotate(${props.elements.find(el => el.id === selectedElement)?.rotation || 0}deg)`
       }"
     >
       <div class="absolute -top-1 -left-1 w-2 h-2 bg-blue-400 rounded-full"></div>
