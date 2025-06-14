@@ -218,7 +218,16 @@ const drawGrid = (ctx: CanvasRenderingContext2D) => {
   if (!props.showGrid) return
   
   const { width, height } = canvasDimensions.value
-  const size = props.gridSize || 20
+  
+  // Calculer la taille de la grille en fonction de la taille du canvas
+  // On vise environ 20-30 mailles dans la plus grande dimension
+  const baseSize = Math.max(width, height)
+  const targetCells = 15 // Nombre cible de cellules dans la plus grande dimension
+  let size = Math.max(10, Math.floor(baseSize / targetCells / 10) * 10) // Arrondir à la dizaine la plus proche
+  
+  // Ajuster la taille minimale et maximale de la grille
+  size = Math.max(20, Math.min(100, size))
+  
   const dotColor = '#8b5cf6' // Couleur violette pour les points
   const dotSize = 2 // Taille des points
   
@@ -228,12 +237,12 @@ const drawGrid = (ctx: CanvasRenderingContext2D) => {
   ctx.fillStyle = dotColor
   
   // Calculer le nombre de points nécessaires
-  const cols = Math.ceil(width / size)
-  const rows = Math.ceil(height / size)
+  const cols = Math.ceil(width / size) + 1
+  const rows = Math.ceil(height / size) + 1
   
   // Ajuster pour centrer la grille si nécessaire
-  const offsetX = (width - (cols - 1) * size) / 2
-  const offsetY = (height - (rows - 1) * size) / 2
+  const offsetX = (width % size) / 2
+  const offsetY = (height % size) / 2
   
   // Dessiner les points aux intersections
   for (let y = 0; y < rows; y++) {

@@ -62,7 +62,7 @@ const isActive = (item: { activeRoutes?: string[] }) => {
 </script>
 
 <template>
-  <nav class="bg-black shadow-sm border-b border-gray-200">
+  <nav class="bg-zinc-950 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16">
         <!-- Logo et navigation principale -->

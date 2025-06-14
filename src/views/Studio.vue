@@ -32,7 +32,7 @@ const elements = ref<CanvasElement[]>([])
 const format = ref<'16:9' | '9:16'>('16:9')
 // Contrôles de la grille
 const showGrid = ref(true)
-const gridSize = ref(20)
+const gridSize = ref(40) // Augmenté de 20 à 40 pour des mailles plus grandes
 const gridColor = ref('rgba(255, 255, 255, 0.1)')
 const selectedElement = ref<string | null>(null)
 const snapEnabled = ref(true)
@@ -86,7 +86,7 @@ const saveProject = () => {
       />
     </div>
     
-    <footer class="fixed bottom-0 w-full h-20 bg-black/80 backdrop-blur flex justify-between items-center px-8 border-t border-white/10 z-50">
+    <footer class="fixed bottom-0 w-full h-20 bg-zinc-950 backdrop-blur flex justify-between items-center px-8 z-50">
       <div class="controls-left">
         <button 
           class="control-button"
