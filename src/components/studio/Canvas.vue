@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted, computed } from 'vue'
+import { ref, onMounted, watch, onUnmounted } from 'vue'
 
-interface CanvasElement {
+export type CanvasElementType = 'camera' | 'image' | 'screen' | 'text' | 'video'
+
+export interface CanvasElement {
   id: string
-  type: 'camera' | 'image' | 'screen' | 'text'
+  type: CanvasElementType
   x: number
   y: number
   width: number
@@ -30,7 +32,12 @@ const props = defineProps<{
   showGrid?: boolean
 }>()
 
-const emit = defineEmits(['element-select', 'element-update', 'element-edit'])
+const emit = defineEmits<{
+  (e: 'element-select', id: string | null): void
+  (e: 'element-update', element: CanvasElement): void
+  (e: 'element-edit', element: CanvasElement): void
+  (e: 'element-delete', id: string): void
+}>()
 
 // Réf du canvas HTML réel
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -39,11 +46,61 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const cameraVideos = ref<Record<string, HTMLVideoElement>>({})
 const screenVideos = ref<Record<string, HTMLVideoElement>>({})
 
-// Gère les dimensions du canvas
-const canvasDimensions = computed(() => props.format === '16:9'
-  ? { width: 960, height: 540 }
-  : { width: 540, height: 960 }
-)
+// Référence au conteneur parent
+const containerRef = ref<HTMLElement | null>(null)
+
+// Gère les dimensions du canvas en fonction du format et du conteneur
+const updateCanvasSize = () => {
+  if (!canvasRef.value || !containerRef.value) return
+  
+  const containerWidth = containerRef.value.clientWidth
+  const containerHeight = containerRef.value.clientHeight
+  const dpr = window.devicePixelRatio || 1
+
+  // Calcul des dimensions en fonction du format
+  let canvasWidth = containerWidth
+  let canvasHeight = containerHeight
+  let targetRatio = 16 / 9 // Par défaut 16:9
+
+  if (props.format === '16:9') {
+    targetRatio = 16 / 9
+  } else if (props.format === '9:16') {
+    targetRatio = 9 / 16
+  }
+  
+  const currentRatio = containerWidth / containerHeight
+  
+  if (currentRatio > targetRatio) {
+    // Trop large, on ajuste la largeur
+    canvasWidth = containerHeight * targetRatio
+  } else {
+    // Trop haut, on ajuste la hauteur
+    canvasHeight = containerWidth / targetRatio
+  }
+  
+  // Mise à jour des dimensions du canvas
+  const canvas = canvasRef.value
+  const ctx = canvas.getContext('2d')
+  
+  if (!ctx) return
+  
+  // Dimensions physiques (pixels réels)
+  const physicalWidth = Math.floor(canvasWidth * dpr)
+  const physicalHeight = Math.floor(canvasHeight * dpr)
+  
+  // Dimensions logiques (CSS)
+  canvas.width = physicalWidth
+  canvas.height = physicalHeight
+  canvas.style.width = `${canvasWidth}px`
+  canvas.style.height = `${canvasHeight}px`
+  
+  // Mise à jour de l'échelle du contexte
+  ctx.scale(dpr, dpr)
+  ctx.imageSmoothingEnabled = true
+  
+  // Redessiner le contenu
+  drawCanvas()
+}
 
 // Initialise les balises vidéo pour chaque stream unique (camera/screen)
 watch(() => props.elements, (elements) => {
@@ -88,13 +145,22 @@ function cleanupVideoElements(elements: CanvasElement[]) {
 }
 onUnmounted(() => cleanupVideoElements([]))
 
-// Gestion du glisser-déposer
-let isDragging = false
-let draggedElement: CanvasElement | null = null
-let dragStartX = 0
-let dragStartY = 0
-let elementStartX = 0
-let elementStartY = 0
+// Définition des types
+interface CanvasDimensions {
+  width: number
+  height: number
+}
+
+// Références réactives pour l'état du canvas
+const canvasDimensions = ref<CanvasDimensions>({ width: 0, height: 0 })
+const isDragging = ref(false)
+const draggedElement = ref<CanvasElement | null>(null)
+const dragStartX = ref(0)
+const dragStartY = ref(0)
+const elementStartX = ref(0)
+const elementStartY = ref(0)
+const isResizing = ref(false)
+const resizeHandle = ref('')
 
 // État pour l'édition de texte
 const editingText = ref<{
@@ -130,12 +196,12 @@ function handleMouseDown(e: MouseEvent) {
       y >= el.y && 
       y <= el.y + el.height
     ) {
-      isDragging = true
-      draggedElement = { ...el }
-      dragStartX = x
-      dragStartY = y
-      elementStartX = el.x
-      elementStartY = el.y
+      isDragging.value = true
+      draggedElement.value = { ...el }
+      dragStartX.value = x
+      dragStartY.value = y
+      elementStartX.value = el.x
+      elementStartY.value = el.y
       emit('element-select', el.id)
       break
     }
@@ -143,28 +209,28 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 function handleMouseMove(e: MouseEvent) {
-  if (!isDragging || !draggedElement || !canvasRef.value) return
+  if (!isDragging.value || !draggedElement.value || !canvasRef.value) return
   
   const rect = canvasRef.value.getBoundingClientRect()
   const x = e.clientX - rect.left
   const y = e.clientY - rect.top
   
   // Calculer le déplacement
-  const dx = x - dragStartX
-  const dy = y - dragStartY
+  const dx = x - dragStartX.value
+  const dy = y - dragStartY.value
   
   // Mettre à jour la position de l'élément avec snap si activé
   const snapSize = props.snapEnabled ? 10 : 1
-  const newX = Math.max(0, Math.round((elementStartX + dx) / snapSize) * snapSize)
-  const newY = Math.max(0, Math.round((elementStartY + dy) / snapSize) * snapSize)
+  const newX = Math.max(0, Math.round((elementStartX.value + dx) / snapSize) * snapSize)
+  const newY = Math.max(0, Math.round((elementStartY.value + dy) / snapSize) * snapSize)
   
   // Émettre la mise à jour
-  emit('element-update', draggedElement.id, { x: newX, y: newY })
+  emit('element-update', draggedElement.value.id, { x: newX, y: newY })
 }
 
 function handleMouseUp(e: MouseEvent) {
-  isDragging = false
-  draggedElement = null
+  isDragging.value = false
+  draggedElement.value = null
   
   // Si on est en train d'éditer, on ne fait rien
   if (editingText.value) return
@@ -213,6 +279,16 @@ function saveTextEdit() {
   }
   
   editingText.value = null
+}
+
+// Supprimer un élément
+const handleDeleteElement = (elementId: string) => {
+  const index = props.elements.findIndex(el => el.id === elementId)
+  if (index !== -1) {
+    const [deleted] = props.elements.splice(index, 1)
+    drawCanvas()
+    emit('element-delete', deleted)
+  }
 }
 
 // Annuler l'édition
@@ -280,6 +356,30 @@ function handleTouchEnd() {
   draggedElement = null
 }
 
+// Redessiner le canvas quand les dimensions changent
+watch(canvasDimensions, () => {
+  updateCanvasSize()
+})
+
+// Observer les changements de taille du conteneur
+const resizeObserver = new ResizeObserver(() => {
+  // Le computed canvasDimensions se mettra à jour automatiquement
+  // ce qui déclenchera le watcher ci-dessus
+})
+
+onMounted(() => {
+  if (containerRef.value) {
+    resizeObserver.observe(containerRef.value)
+  }
+  drawCanvas()
+})
+
+onUnmounted(() => {
+  resizeObserver.disconnect()
+  cancelAnimationFrame(animationFrame)
+  cleanupVideoElements([])
+})
+
 // Dessin du canvas à chaque frame
 let animationFrame: number
 
@@ -311,11 +411,18 @@ function drawGrid(ctx: CanvasRenderingContext2D) {
 }
 
 function drawCanvas() {
+  console.log('drawCanvas called')
   const canvas = canvasRef.value
-  if (!canvas) return
+  if (!canvas) {
+    console.error('Canvas element not found')
+    return
+  }
   
   const ctx = canvas.getContext('2d')
-  if (!ctx) return
+  if (!ctx) {
+    console.error('Could not get 2D context')
+    return
+  }
   
   // Mettre à jour la taille du canvas si nécessaire
   if (canvas.width !== canvasDimensions.value.width || canvas.height !== canvasDimensions.value.height) {
@@ -385,10 +492,15 @@ function drawCanvas() {
 }
 
 onMounted(() => {
+  console.log('Canvas component mounted')
+  updateCanvasSize()
+  window.addEventListener('resize', updateCanvasSize)
   drawCanvas()
+  console.log('Canvas draw called')
 })
 onUnmounted(() => {
   if (animationFrame) cancelAnimationFrame(animationFrame)
+  window.removeEventListener('resize', updateCanvasSize)
 })
 
 // Expose la méthode getCanvas (pour .captureStream())
@@ -398,36 +510,32 @@ defineExpose({
 </script>
 
 <template>
-  <div class="relative">
+  <div ref="containerRef" class="relative w-full h-full flex items-center justify-center">
+    <!-- Canvas principal -->
     <canvas
       ref="canvasRef"
-      :width="canvasDimensions.width"
-      :height="canvasDimensions.height"
+      class="bg-black border border-gray-200 rounded-lg shadow-sm"
       :style="{
-        display: 'block',
-        background: '#000',
-        borderRadius: '16px',
+        width: `${canvasDimensions.width}px`,
+        height: `${canvasDimensions.height}px`,
         cursor: isDragging ? 'grabbing' : 'default',
-        touchAction: 'none', // Important pour le déplacement sur mobile
-        position: 'relative',
-        zIndex: 1
+        touchAction: 'none'
       }"
       @mousedown="handleMouseDown"
       @mousemove="handleMouseMove"
       @mouseup="handleMouseUp"
-      @dblclick="(e) => e.preventDefault()"
       @mouseleave="handleMouseUp"
       @touchstart="handleTouchStart"
       @touchmove="handleTouchMove"
       @touchend="handleTouchEnd"
       @touchcancel="handleTouchEnd"
-    />
-    
+    ></canvas>
+
     <!-- Éditeur de texte -->
     <div 
       v-if="editingText"
+      class="absolute z-10"
       :style="{
-        position: 'absolute',
         left: `${editingText.x}px`,
         top: `${editingText.y}px`,
         zIndex: 10
