@@ -217,26 +217,33 @@ const drawGrid = (ctx: CanvasRenderingContext2D) => {
   
   const { width, height } = canvasDimensions.value
   const size = props.gridSize || 20
-  const color = props.gridColor || 'rgba(255, 255, 255, 0.1)'
+  const dotColor = '#8b5cf6' // Couleur violette pour les points
+  const dotSize = 2 // Taille des points
   
   ctx.save()
-  ctx.strokeStyle = color
-  ctx.lineWidth = 1
   
-  // Lignes verticales
-  for (let x = 0; x <= width; x += size) {
-    ctx.beginPath()
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, height)
-    ctx.stroke()
-  }
+  // Dessiner les points aux intersections
+  ctx.fillStyle = dotColor
   
-  // Lignes horizontales
-  for (let y = 0; y <= height; y += size) {
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(width, y)
-    ctx.stroke()
+  // Calculer le nombre de points nécessaires
+  const cols = Math.ceil(width / size)
+  const rows = Math.ceil(height / size)
+  
+  // Ajuster pour centrer la grille si nécessaire
+  const offsetX = (width - (cols - 1) * size) / 2
+  const offsetY = (height - (rows - 1) * size) / 2
+  
+  // Dessiner les points aux intersections
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const posX = Math.round(offsetX + x * size)
+      const posY = Math.round(offsetY + y * size)
+      
+      // Dessiner un point arrondi
+      ctx.beginPath()
+      ctx.arc(posX, posY, dotSize / 2, 0, Math.PI * 2)
+      ctx.fill()
+    }
   }
   
   ctx.restore()
