@@ -3,8 +3,12 @@
     <!-- Header -->
     <header class="py-4 shadow-sm bg-white">
       <div class="container mx-auto px-4 flex items-center justify-between">
-        <RouterLink to="/" class="text-xl font-bold text-blue-600">ClipLive</RouterLink>
-        <RouterLink to="/" class="text-sm text-gray-600 hover:text-gray-900">Retour à l'accueil</RouterLink>
+        <RouterLink to="/" class="text-xl font-bold text-blue-600"
+          >ClipLive</RouterLink
+        >
+        <RouterLink to="/" class="text-sm text-gray-600 hover:text-gray-900"
+          >Retour à l'accueil</RouterLink
+        >
       </div>
     </header>
 
@@ -16,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView } from "vue-router";
 </script>
 
 <style scoped>

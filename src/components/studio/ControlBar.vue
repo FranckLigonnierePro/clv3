@@ -1,32 +1,42 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Play, Square, Video, VideoOff, Mic, MicOff, Users, Link } from 'lucide-vue-next'
+import { ref } from "vue";
+import {
+  Play,
+  Square,
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
+  Users,
+  Link,
+} from "lucide-vue-next";
 
 interface Props {
-  isLive: boolean
-  isRecording: boolean
-  videoEnabled: boolean
-  audioEnabled: boolean
-  audioLevel: number
-  shareUrl?: string
+  isLive: boolean;
+  isRecording: boolean;
+  videoEnabled: boolean;
+  audioEnabled: boolean;
+  audioLevel: number;
+  shareUrl?: string;
 }
 
 interface Emits {
-  (e: 'toggle-live'): void
-  (e: 'toggle-recording'): void
-  (e: 'toggle-video'): void
-  (e: 'toggle-audio'): void
-  (e: 'toggle-video'): void
-  (e: 'copy-share-link'): void
+  (e: "toggle-live"): void;
+  (e: "toggle-recording"): void;
+  (e: "toggle-video"): void;
+  (e: "toggle-audio"): void;
+  (e: "toggle-video"): void;
+  (e: "copy-share-link"): void;
 }
 
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
+const props = defineProps<Props>();
+const emit = defineEmits<Emits>();
 
 const showShareTooltip = ref(false);
 
 const handleToggleLive = () => {
-  emit('toggle-live');};
+  emit("toggle-live");
+};
 
 const handleCopyShareLink = async () => {
   if (props.shareUrl) {
@@ -37,20 +47,20 @@ const handleCopyShareLink = async () => {
         showShareTooltip.value = false;
       }, 2000);
     } catch (err) {
-      console.error('Erreur lors de la copie du lien:', err);
+      console.error("Erreur lors de la copie du lien:", err);
       // Fallback pour les navigateurs qui ne supportent pas clipboard API
-      const textArea = document.createElement('textarea');
-      textArea.value = props.shareUrl || '';
+      const textArea = document.createElement("textarea");
+      textArea.value = props.shareUrl || "";
       document.body.appendChild(textArea);
       textArea.select();
       try {
-        document.execCommand('copy');
+        document.execCommand("copy");
         showShareTooltip.value = true;
         setTimeout(() => {
           showShareTooltip.value = false;
         }, 2000);
       } catch (err) {
-        console.error('Erreur lors de la copie du lien (fallback):', err);
+        console.error("Erreur lors de la copie du lien (fallback):", err);
       }
       document.body.removeChild(textArea);
     }
@@ -67,7 +77,7 @@ const handleCopyShareLink = async () => {
         <div class="flex items-center space-x-2">
           <Mic class="w-5 h-5 text-gray-400" />
           <div class="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-            <div 
+            <div
               class="h-full bg-blue-500 transition-all duration-100"
               :style="{ width: `${Math.min(props.audioLevel, 100)}%` }"
             ></div>
@@ -102,15 +112,17 @@ const handleCopyShareLink = async () => {
           <button
             @click="handleToggleLive"
             class="px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center space-x-2"
-            :class="props.isLive 
-              ? 'bg-red-500 hover:bg-red-600 text-white' 
-              : 'bg-purple-600 hover:bg-purple-700 text-white'"
+            :class="
+              props.isLive
+                ? 'bg-red-500 hover:bg-red-600 text-white'
+                : 'bg-purple-600 hover:bg-purple-700 text-white'
+            "
           >
             <Play v-if="!props.isLive" class="w-4 h-4" />
             <Square v-else class="w-4 h-4" />
-            <span>{{ props.isLive ? 'En direct' : 'Démarrer le live' }}</span>
+            <span>{{ props.isLive ? "En direct" : "Démarrer le live" }}</span>
           </button>
-          
+
           <!-- Bouton de partage visible uniquement en live -->
           <button
             v-if="props.isLive && props.shareUrl"
@@ -120,8 +132,8 @@ const handleCopyShareLink = async () => {
           >
             <Link class="w-4 h-4" />
           </button>
-          
-          <div 
+
+          <div
             v-if="showShareTooltip"
             class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded whitespace-nowrap"
           >
@@ -133,13 +145,20 @@ const handleCopyShareLink = async () => {
         <button
           @click="emit('toggle-recording')"
           class="px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center space-x-2"
-          :class="props.isRecording 
-            ? 'bg-red-600 hover:bg-red-700 text-white' 
-            : 'bg-gray-700 hover:bg-gray-600 text-white'"
+          :class="
+            props.isRecording
+              ? 'bg-red-600 hover:bg-red-700 text-white'
+              : 'bg-gray-700 hover:bg-gray-600 text-white'
+          "
         >
-          <div v-if="props.isRecording" class="w-3 h-3 bg-white rounded-full"></div>
+          <div
+            v-if="props.isRecording"
+            class="w-3 h-3 bg-white rounded-full"
+          ></div>
           <div v-else class="w-3 h-3 bg-red-500 rounded-full"></div>
-          <span>{{ props.isRecording ? 'Arrêter l\'enregistrement' : 'Enregistrer' }}</span>
+          <span>{{
+            props.isRecording ? "Arrêter l'enregistrement" : "Enregistrer"
+          }}</span>
         </button>
       </div>
     </div>

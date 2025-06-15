@@ -1,66 +1,66 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { defineStore } from "pinia";
+import { ref } from "vue";
 
-type NotificationType = 'success' | 'error' | 'info' | 'warning'
+type NotificationType = "success" | "error" | "info" | "warning";
 
 interface Notification {
-  id: string
-  type: NotificationType
-  title: string
-  message: string
-  timeout?: number
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  timeout?: number;
 }
 
-export const useNotifications = defineStore('notifications', () => {
-  const notifications = ref<Notification[]>([])
-  const defaultTimeout = 5000 // 5 secondes
+export const useNotifications = defineStore("notifications", () => {
+  const notifications = ref<Notification[]>([]);
+  const defaultTimeout = 5000; // 5 secondes
 
   const addNotification = ({
-    type = 'info',
+    type = "info",
     title,
     message,
-    timeout = defaultTimeout
+    timeout = defaultTimeout,
   }: {
-    type?: NotificationType
-    title: string
-    message: string
-    timeout?: number
+    type?: NotificationType;
+    title: string;
+    message: string;
+    timeout?: number;
   }) => {
-    const id = Math.random().toString(36).substring(2, 11)
+    const id = Math.random().toString(36).substring(2, 11);
     const notification: Notification = {
       id,
       type,
       title,
       message,
-      timeout
-    }
+      timeout,
+    };
 
-    notifications.value.push(notification)
+    notifications.value.push(notification);
 
     if (timeout > 0) {
       setTimeout(() => {
-        removeNotification(id)
-      }, timeout)
+        removeNotification(id);
+      }, timeout);
     }
 
-    return id
-  }
+    return id;
+  };
 
   const removeNotification = (id: string) => {
-    const index = notifications.value.findIndex(n => n.id === id)
+    const index = notifications.value.findIndex((n) => n.id === id);
     if (index !== -1) {
-      notifications.value.splice(index, 1)
+      notifications.value.splice(index, 1);
     }
-  }
+  };
 
   const clearAll = () => {
-    notifications.value = []
-  }
+    notifications.value = [];
+  };
 
   return {
     notifications,
     addNotification,
     removeNotification,
-    clearAll
-  }
-})
+    clearAll,
+  };
+});

@@ -1,64 +1,76 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { Menu, X, User, LogOut, Settings, Video, Plus, Home, Search } from 'lucide-vue-next'
+import { ref, computed } from "vue";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
+import {
+  Menu,
+  X,
+  User,
+  LogOut,
+  Settings,
+  Video,
+  Plus,
+  Home,
+  Search,
+} from "lucide-vue-next";
 
-const router = useRouter()
-const authStore = useAuthStore()
-const isMobileMenuOpen = ref(false)
+const router = useRouter();
+const authStore = useAuthStore();
+const isMobileMenuOpen = ref(false);
 
 const userInitials = computed(() => {
-  if (!authStore.user?.email) return '?'
-  return authStore.user.email.charAt(0).toUpperCase()
-})
+  if (!authStore.user?.email) return "?";
+  return authStore.user.email.charAt(0).toUpperCase();
+});
 
 const toggleMobileMenu = () => {
-  isMobileMenuOpen.value = !isMobileMenuOpen.value
-}
+  isMobileMenuOpen.value = !isMobileMenuOpen.value;
+};
 
 const handleLogout = async () => {
   try {
     // First navigate to landing page
-    await router.push('/')
+    await router.push("/");
     // Then perform logout
-    await authStore.logout()
+    await authStore.logout();
     // Force a hard reload to ensure all auth state is cleared
-    window.location.reload()
+    window.location.reload();
   } catch (error) {
-    console.error('Logout failed:', error)
+    console.error("Logout failed:", error);
     // Even if there's an error, still try to redirect
-    window.location.href = '/'
+    window.location.href = "/";
   }
-}
+};
 
 const navItems = [
-  { 
-    name: 'Accueil', 
-    to: { name: 'dashboard' }, 
+  {
+    name: "Accueil",
+    to: { name: "dashboard" },
     icon: Home,
-    activeRoutes: ['dashboard']
+    activeRoutes: ["dashboard"],
   },
-  { 
-    name: 'Le Studio', 
-    to: { name: 'studio', params: { id: 'new' } }, 
+  {
+    name: "Le Studio",
+    to: { name: "studio", params: { id: "new" } },
     icon: Video,
-    activeRoutes: ['studio']
-  }
-]
+    activeRoutes: ["studio"],
+  },
+];
 
 const userMenuItems = [
-  { name: 'Profil', to: { name: 'profile' }, icon: User },
-  { name: 'Paramètres', to: { name: 'settings' }, icon: Settings },
-  { name: 'Déconnexion', action: handleLogout, icon: LogOut },
-]
+  { name: "Profil", to: { name: "profile" }, icon: User },
+  { name: "Paramètres", to: { name: "settings" }, icon: Settings },
+  { name: "Déconnexion", action: handleLogout, icon: LogOut },
+];
 
 // Vérifier si un élément de menu est actif
 const isActive = (item: { activeRoutes?: string[] }) => {
-  if (!item.activeRoutes) return false
-  const currentRouteName = router.currentRoute.value.name?.toString()
-  return currentRouteName ? item.activeRoutes.includes(currentRouteName) : false
-}
+  if (!item.activeRoutes) return false;
+  const currentRouteName = router.currentRoute.value.name?.toString();
+  return currentRouteName
+    ? item.activeRoutes.includes(currentRouteName)
+    : false;
+};
 </script>
 
 <template>
@@ -68,11 +80,14 @@ const isActive = (item: { activeRoutes?: string[] }) => {
         <!-- Logo et navigation principale -->
         <div class="flex">
           <div class="flex-shrink-0 flex items-center">
-            <router-link to="/dashboard" class="text-xl font-bold text-indigo-600">
+            <router-link
+              to="/dashboard"
+              class="text-xl font-bold text-indigo-600"
+            >
               ClipLive
             </router-link>
           </div>
-          
+
           <!-- Navigation desktop -->
           <div class="hidden sm:-my-px sm:ml-6 sm:flex sm:space-x-8">
             <router-link
@@ -82,8 +97,9 @@ const isActive = (item: { activeRoutes?: string[] }) => {
               class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
               :class="{
                 'border-indigo-500 text-white': isActive(item),
-                'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700': !isActive(item),
-                'ml-4': item.name !== 'Accueil'
+                'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700':
+                  !isActive(item),
+                'ml-4': item.name !== 'Accueil',
               }"
               @click="isMobileMenuOpen = false"
             >
@@ -92,7 +108,6 @@ const isActive = (item: { activeRoutes?: string[] }) => {
             </router-link>
           </div>
         </div>
-
 
         <!-- Menu utilisateur desktop -->
         <div class="hidden sm:ml-6 sm:flex sm:items-center">
@@ -106,13 +121,14 @@ const isActive = (item: { activeRoutes?: string[] }) => {
                 aria-haspopup="true"
               >
                 <span class="sr-only">Ouvrir le menu utilisateur</span>
-                <div class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
+                <div
+                  class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium"
+                >
                   {{ userInitials }}
                 </div>
               </button>
             </div>
 
-            
             <!-- Dropdown menu utilisateur -->
             <transition
               enter-active-class="transition ease-out duration-200"
@@ -138,7 +154,10 @@ const isActive = (item: { activeRoutes?: string[] }) => {
                     @click="isMobileMenuOpen = false"
                   >
                     <div class="flex items-center">
-                      <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-500" />
+                      <component
+                        :is="item.icon"
+                        class="mr-3 h-5 w-5 text-gray-500"
+                      />
                       {{ item.name }}
                     </div>
                   </router-link>
@@ -148,14 +167,17 @@ const isActive = (item: { activeRoutes?: string[] }) => {
                     role="menuitem"
                     @click="item.action()"
                   >
-                    <component :is="item.icon" class="mr-3 h-5 w-5 text-gray-500" />
+                    <component
+                      :is="item.icon"
+                      class="mr-3 h-5 w-5 text-gray-500"
+                    />
                     {{ item.name }}
                   </button>
                 </template>
               </div>
             </transition>
           </div>
-          
+
           <!-- Bouton de connexion -->
           <template v-else>
             <router-link
@@ -175,7 +197,6 @@ const isActive = (item: { activeRoutes?: string[] }) => {
           </template>
         </div>
 
-        
         <!-- Bouton menu mobile -->
         <div class="-mr-2 flex items-center sm:hidden">
           <button
@@ -185,7 +206,11 @@ const isActive = (item: { activeRoutes?: string[] }) => {
             aria-expanded="false"
           >
             <span class="sr-only">Ouvrir le menu principal</span>
-            <Menu v-if="!isMobileMenuOpen" class="block h-6 w-6" aria-hidden="true" />
+            <Menu
+              v-if="!isMobileMenuOpen"
+              class="block h-6 w-6"
+              aria-hidden="true"
+            />
             <X v-else class="block h-6 w-6" aria-hidden="true" />
           </button>
         </div>
@@ -202,20 +227,27 @@ const isActive = (item: { activeRoutes?: string[] }) => {
           @click="isMobileMenuOpen = false"
           class="flex items-center px-3 py-2 text-base font-medium rounded-md"
           :class="{
-            'bg-indigo-50 border-indigo-500 text-indigo-700': $route.path.startsWith(item.path) && item.path !== '/',
-            'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800': !$route.path.startsWith(item.path) || item.path === '/',
+            'bg-indigo-50 border-indigo-500 text-indigo-700':
+              $route.path.startsWith(item.path) && item.path !== '/',
+            'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800':
+              !$route.path.startsWith(item.path) || item.path === '/',
           }"
         >
           <component :is="item.icon" class="mr-3 h-5 w-5" />
           {{ item.name }}
         </router-link>
       </div>
-      
+
       <!-- Menu utilisateur mobile -->
-      <div v-if="authStore.isAuthenticated" class="pt-4 pb-3 border-t border-gray-200">
+      <div
+        v-if="authStore.isAuthenticated"
+        class="pt-4 pb-3 border-t border-gray-200"
+      >
         <div class="flex items-center px-4">
           <div class="flex-shrink-0">
-            <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
+            <div
+              class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium"
+            >
               {{ userInitials }}
             </div>
           </div>
@@ -247,7 +279,7 @@ const isActive = (item: { activeRoutes?: string[] }) => {
           </template>
         </div>
       </div>
-      
+
       <!-- Boutons de connexion mobile -->
       <div v-else class="pt-4 pb-3 border-t border-gray-200">
         <div class="space-y-1">

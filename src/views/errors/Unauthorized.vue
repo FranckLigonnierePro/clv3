@@ -1,5 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+  <div
+    class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8"
+  >
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
       <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
         403 - Accès refusé
@@ -26,9 +28,12 @@
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
             />
           </svg>
-          <h3 class="mt-2 text-lg font-medium text-gray-900">Accès non autorisé</h3>
+          <h3 class="mt-2 text-lg font-medium text-gray-900">
+            Accès non autorisé
+          </h3>
           <p class="mt-1 text-sm text-gray-500">
-            Vous devez être connecté avec les droits d'administration pour accéder à cette page.
+            Vous devez être connecté avec les droits d'administration pour
+            accéder à cette page.
           </p>
           <div class="mt-6 space-y-4">
             <router-link
@@ -51,12 +56,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent } from "vue";
 
 export default defineComponent({
-  name: 'Unauthorized',
+  name: "Unauthorized",
   metaInfo: {
-    title: 'Accès non autorisé',
+    title: "Accès non autorisé",
   },
 });
 </script>

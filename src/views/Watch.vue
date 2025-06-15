@@ -9,132 +9,154 @@
     <!-- Lecteur vidéo -->
     <div class="max-w-4xl mx-auto bg-black rounded-xl overflow-hidden">
       <div class="relative w-full aspect-video bg-black">
-        <video 
-          ref="videoRef" 
+        <video
+          ref="videoRef"
           autoplay
           playsinline
           muted
           class="w-full h-full"
         ></video>
-        
+
         <!-- État de chargement -->
-        <div v-if="!isLive" class="absolute inset-0 flex items-center justify-center bg-black/50">
+        <div
+          v-if="!isLive"
+          class="absolute inset-0 flex items-center justify-center bg-black/50"
+        >
           <div class="text-center">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+            <div
+              class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"
+            ></div>
             <p class="mt-2 text-white">En attente du flux vidéo...</p>
           </div>
         </div>
-        
+
         <!-- Indicateur EN DIRECT -->
-        <div v-if="isLive" class="absolute top-4 left-4 bg-red-500 px-3 py-1 rounded-full text-sm font-medium">
+        <div
+          v-if="isLive"
+          class="absolute top-4 left-4 bg-red-500 px-3 py-1 rounded-full text-sm font-medium"
+        >
           EN DIRECT
         </div>
       </div>
     </div>
 
     <!-- Message d'erreur -->
-    <div v-if="error" class="mt-4 p-4 bg-red-900/50 text-red-200 rounded-lg max-w-2xl mx-auto">
+    <div
+      v-if="error"
+      class="mt-4 p-4 bg-red-900/50 text-red-200 rounded-lg max-w-2xl mx-auto"
+    >
       {{ error }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, onBeforeUnmount, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import { Room, Track } from 'livekit-client';
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  watch,
+} from "vue";
+import { useRoute } from "vue-router";
+import { Room, Track } from "livekit-client";
 
 const route = useRoute();
 const videoRef = ref(null);
 const room = ref(null);
 const isLive = ref(false);
-const error = ref('');
-const roomName = ref('');
+const error = ref("");
+const roomName = ref("");
 
 // Configuration LiveKit
-const livekitUrl = import.meta.env.VITE_LIVEKIT_WS_URL || 'wss://clipstudio-vdf7emf1.livekit.cloud';
+const livekitUrl =
+  import.meta.env.VITE_LIVEKIT_WS_URL ||
+  "wss://clipstudio-vdf7emf1.livekit.cloud";
 
 // Props du composant
 const props = defineProps({
   room: {
     type: String,
-    required: true
+    required: true,
   },
   token: {
     type: String,
-    required: true
-  }
+    required: true,
+  },
 });
 
 // Log des propriétés reçues
-console.log('Watch component mounted with props:', {
+console.log("Watch component mounted with props:", {
   room: props.room,
-  token: props.token ? 'token-present' : 'token-missing'
+  token: props.token ? "token-present" : "token-missing",
 });
 
 // Gestion des pistes vidéo
 const handleTrackSubscribed = (track, publication, participant) => {
-  console.log('Piste reçue:', {
+  console.log("Piste reçue:", {
     kind: track.kind,
     id: track.sid,
     participant: participant.identity,
     isMuted: track.isMuted,
     isEnabled: track.isEnabled,
-    readyState: track.mediaStreamTrack.readyState
+    readyState: track.mediaStreamTrack.readyState,
   });
 
   if (track.kind === Track.Kind.Video) {
     if (!videoRef.value) {
-      console.error('Élément vidéo non trouvé');
+      console.error("Élément vidéo non trouvé");
       return;
     }
-    
-    console.log('Configuration de la piste vidéo...');
+
+    console.log("Configuration de la piste vidéo...");
     const videoElement = videoRef.value;
-    
+
     // Créer un nouveau MediaStream avec la piste
     const mediaStream = new MediaStream([track.mediaStreamTrack]);
-    
+
     // Vérifier si la piste contient des données
     const videoTrack = mediaStream.getVideoTracks()[0];
     if (!videoTrack) {
-      console.error('Aucune piste vidéo trouvée dans le MediaStream');
+      console.error("Aucune piste vidéo trouvée dans le MediaStream");
       return;
     }
-    
-    console.log('Piste vidéo détectée avec les capacités:', {
+
+    console.log("Piste vidéo détectée avec les capacités:", {
       width: videoTrack.getSettings().width,
       height: videoTrack.getSettings().height,
       frameRate: videoTrack.getSettings().frameRate,
-      readyState: videoTrack.readyState
+      readyState: videoTrack.readyState,
     });
-    
+
     // Configurer l'élément vidéo
     videoElement.playsInline = true;
     videoElement.muted = true; // Important pour la lecture automatique
     videoElement.srcObject = mediaStream;
-    
+
     // Essayer de lire la vidéo
     const playPromise = videoElement.play();
-    
+
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
-          console.log('Lecture vidéo démarrée avec succès');
+          console.log("Lecture vidéo démarrée avec succès");
           isLive.value = true;
         })
-        .catch(err => {
-          console.error('Erreur lors de la lecture vidéo:', err);
+        .catch((err) => {
+          console.error("Erreur lors de la lecture vidéo:", err);
           // Essayer avec une approche différente
           videoElement.muted = true;
-          videoElement.play()
+          videoElement
+            .play()
             .then(() => {
-              console.log('Lecture réussie après activation du mode muet');
+              console.log("Lecture réussie après activation du mode muet");
               isLive.value = true;
             })
-            .catch(e => {
-              console.error('Échec de la lecture vidéo:', e);
-              error.value = 'Impossible de lire le flux vidéo';
+            .catch((e) => {
+              console.error("Échec de la lecture vidéo:", e);
+              error.value = "Impossible de lire le flux vidéo";
             });
         });
     }
@@ -147,30 +169,30 @@ const cleanup = async () => {
     try {
       await room.value.disconnect();
     } catch (e) {
-      console.error('Erreur lors de la déconnexion:', e);
+      console.error("Erreur lors de la déconnexion:", e);
     }
   }
-  
+
   if (videoRef.value) {
     videoRef.value.srcObject = null;
   }
-  
+
   isLive.value = false;
 };
 
 // Connexion à la room
 const connectToRoom = async () => {
   if (!props.room || !props.token) {
-    const errorMsg = 'Paramètres de salle ou de jeton manquants';
+    const errorMsg = "Paramètres de salle ou de jeton manquants";
     console.error(errorMsg, { room: props.room, hasToken: !!props.token });
     error.value = errorMsg;
     throw new Error(errorMsg);
   }
-  
+
   roomName.value = props.room;
   const token = props.token;
-  console.log('Tentative de connexion à la room:', roomName.value);
-  
+  console.log("Tentative de connexion à la room:", roomName.value);
+
   try {
     // Créer une nouvelle instance Room
     const newRoom = new Room({
@@ -179,14 +201,14 @@ const connectToRoom = async () => {
       dynacast: false,
       // Activer les logs détaillés
       logger: console,
-      logLevel: 'debug',
+      logLevel: "debug",
     });
-    
+
     // Configurer les gestionnaires d'événements
     newRoom
-      .on('trackSubscribed', handleTrackSubscribed)
-      .on('trackUnsubscribed', (track) => {
-        console.log('Piste désinscrite:', track.sid, track.kind);
+      .on("trackSubscribed", handleTrackSubscribed)
+      .on("trackUnsubscribed", (track) => {
+        console.log("Piste désinscrite:", track.sid, track.kind);
         if (track.kind === Track.Kind.Video) {
           isLive.value = false;
           if (videoRef.value) {
@@ -194,75 +216,96 @@ const connectToRoom = async () => {
           }
         }
       })
-      .on('trackPublished', (publication, participant) => {
+      .on("trackPublished", (publication, participant) => {
         try {
-          console.log('Piste publiée par participant:', {
-            participant: participant?.identity || 'inconnu',
-            trackSid: publication?.trackSid || 'inconnu',
-            kind: publication?.kind || 'inconnu'
+          console.log("Piste publiée par participant:", {
+            participant: participant?.identity || "inconnu",
+            trackSid: publication?.trackSid || "inconnu",
+            kind: publication?.kind || "inconnu",
           });
         } catch (error) {
-          console.error('Erreur lors de la journalisation de la piste publiée:', error);
+          console.error(
+            "Erreur lors de la journalisation de la piste publiée:",
+            error,
+          );
         }
       })
-      .on('participantConnected', (participant) => {
+      .on("participantConnected", (participant) => {
         try {
-          console.log('Nouveau participant connecté:', participant?.identity || 'inconnu');
-          
+          console.log(
+            "Nouveau participant connecté:",
+            participant?.identity || "inconnu",
+          );
+
           // Vérifier si le participant a des pistes à s'abonner
           if (participant?.tracks) {
             try {
               // Convertir en tableau de manière sécurisée
-              const tracks = Array.isArray(participant.tracks) 
-                ? participant.tracks 
-                : (participant.tracks instanceof Map || participant.tracks instanceof Set)
+              const tracks = Array.isArray(participant.tracks)
+                ? participant.tracks
+                : participant.tracks instanceof Map ||
+                    participant.tracks instanceof Set
                   ? Array.from(participant.tracks.values())
                   : [];
-              
-              console.log(`Nombre de pistes pour le participant: ${tracks.length}`);
-              
+
+              console.log(
+                `Nombre de pistes pour le participant: ${tracks.length}`,
+              );
+
               tracks.forEach((publication, index) => {
                 if (publication?.track) {
                   console.log(`Piste [${index}]:`, {
-                    trackSid: publication.trackSid || 'inconnu',
-                    kind: publication.kind || 'inconnu',
+                    trackSid: publication.trackSid || "inconnu",
+                    kind: publication.kind || "inconnu",
                     isSubscribed: publication.isSubscribed,
-                    isMuted: publication.isMuted
+                    isMuted: publication.isMuted,
                   });
                 }
               });
             } catch (trackError) {
-              console.error('Erreur lors de la lecture des pistes du participant:', trackError);
+              console.error(
+                "Erreur lors de la lecture des pistes du participant:",
+                trackError,
+              );
             }
           }
         } catch (error) {
-          console.error('Erreur lors de la gestion de la connexion du participant:', error);
+          console.error(
+            "Erreur lors de la gestion de la connexion du participant:",
+            error,
+          );
         }
       })
-      .on('connected', () => {
-        console.log('Connecté à la room avec succès');
+      .on("connected", () => {
+        console.log("Connecté à la room avec succès");
         try {
           if (newRoom?.participants) {
             const participants = Array.isArray(newRoom.participants)
               ? newRoom.participants
-              : (newRoom.participants instanceof Map || newRoom.participants instanceof Set)
+              : newRoom.participants instanceof Map ||
+                  newRoom.participants instanceof Set
                 ? Array.from(newRoom.participants.keys())
                 : [];
-            console.log(`Nombre de participants dans la room: ${participants.length}`);
-            console.log('Liste des participants:', participants);
+            console.log(
+              `Nombre de participants dans la room: ${participants.length}`,
+            );
+            console.log("Liste des participants:", participants);
           } else {
-            console.log('Aucun participant dans la room');
+            console.log("Aucun participant dans la room");
           }
         } catch (error) {
-          console.error('Erreur lors de la récupération des participants:', error);
+          console.error(
+            "Erreur lors de la récupération des participants:",
+            error,
+          );
         }
       })
-      .on('disconnected', () => {
-        console.log('Déconnecté de la room');
+      .on("disconnected", () => {
+        console.log("Déconnecté de la room");
         isLive.value = false;
-        error.value = 'Déconnecté de la diffusion';
+        error.value = "Déconnecté de la diffusion";
       });
-    
+
     // Options de connexion
     const connectOptions = {
       autoSubscribe: true,
@@ -273,43 +316,47 @@ const connectToRoom = async () => {
         getItem: () => null,
         setItem: () => {},
         removeItem: () => {},
-        clear: () => {}
+        clear: () => {},
       },
       // Ajouter un identifiant unique pour chaque participant
       participantIdentity: `viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       rtcConfig: {
         iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
-        ]
-      }
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+        ],
+      },
     };
-    
-    console.log('Connexion à la room avec les options:', connectOptions);
-    
+
+    console.log("Connexion à la room avec les options:", connectOptions);
+
     // Se connecter à la room
     await newRoom.connect(livekitUrl, token, connectOptions);
-    
+
     // Vérifier les participants existants
     try {
-      console.log('État de la room après connexion:', {
+      console.log("État de la room après connexion:", {
         sid: newRoom.sid,
         name: newRoom.name,
         state: newRoom.state,
-        serverRegion: newRoom.serverRegion
+        serverRegion: newRoom.serverRegion,
       });
-      
+
       // Vérifier si newRoom.participants est un Map ou un objet itérable
-      if (newRoom.participants && typeof newRoom.participants === 'object') {
+      if (newRoom.participants && typeof newRoom.participants === "object") {
         try {
           // Essayer de convertir en tableau de différentes manières selon le type
-          const participantsArray = Array.isArray(newRoom.participants) 
-            ? newRoom.participants 
-            : (newRoom.participants.values ? Array.from(newRoom.participants.values()) : []);
-            
-          console.log(`Nombre de participants dans la room: ${participantsArray.length}`);
-          
+          const participantsArray = Array.isArray(newRoom.participants)
+            ? newRoom.participants
+            : newRoom.participants.values
+              ? Array.from(newRoom.participants.values())
+              : [];
+
+          console.log(
+            `Nombre de participants dans la room: ${participantsArray.length}`,
+          );
+
           participantsArray.forEach((participant, index) => {
             if (participant) {
               console.log(`[${index}] Participant:`, {
@@ -318,9 +365,9 @@ const connectToRoom = async () => {
                 metadata: participant.metadata,
                 audioTracks: participant.audioTracks?.size || 0,
                 videoTracks: participant.videoTracks?.size || 0,
-                tracksCount: participant.tracks?.size || 0
+                tracksCount: participant.tracks?.size || 0,
               });
-              
+
               // Afficher les informations sur les pistes vidéo
               if (participant.videoTracks) {
                 participant.videoTracks.forEach((publication, trackId) => {
@@ -329,37 +376,39 @@ const connectToRoom = async () => {
                     kind: publication.kind,
                     isSubscribed: publication.isSubscribed,
                     isMuted: publication.isMuted,
-                    track: publication.track ? 'présente' : 'absente'
+                    track: publication.track ? "présente" : "absente",
                   });
                 });
               }
             }
           });
         } catch (participantError) {
-          console.error('Erreur lors de la lecture des participants:', participantError);
+          console.error(
+            "Erreur lors de la lecture des participants:",
+            participantError,
+          );
         }
       } else {
-        console.warn('Aucun participant trouvé ou participants non itérable');
+        console.warn("Aucun participant trouvé ou participants non itérable");
       }
     } catch (error) {
-      console.error('Erreur lors de la vérification des participants:', error);
+      console.error("Erreur lors de la vérification des participants:", error);
     }
-    
+
     // Stocker la référence
     room.value = newRoom;
     isLive.value = true;
-    
   } catch (err) {
-    console.error('Erreur de connexion:', err);
-    error.value = `Erreur de connexion: ${err.message || 'Erreur inconnue'}`;
+    console.error("Erreur de connexion:", err);
+    error.value = `Erreur de connexion: ${err.message || "Erreur inconnue"}`;
     isLive.value = false;
-    
+
     // Nettoyer en cas d'erreur
     if (room.value) {
       try {
         await room.value.disconnect();
       } catch (e) {
-        console.error('Erreur lors de la déconnexion après erreur:', e);
+        console.error("Erreur lors de la déconnexion après erreur:", e);
       }
       room.value = null;
     }
@@ -370,70 +419,83 @@ const connectToRoom = async () => {
 const handleInteraction = () => {
   if (videoRef.value) {
     videoRef.value.muted = false;
-    videoRef.value.play().catch(e => console.error('Erreur de lecture audio:', e));
+    videoRef.value
+      .play()
+      .catch((e) => console.error("Erreur de lecture audio:", e));
   }
 };
 
 // Cycle de vie du composant
 onMounted(async () => {
-  console.log('=== WATCH COMPONENT MOUNTED ===');
-  console.log('URL complète:', window.location.href);
-  console.log('Paramètres reçus:', { 
-    room: props.room, 
+  console.log("=== WATCH COMPONENT MOUNTED ===");
+  console.log("URL complète:", window.location.href);
+  console.log("Paramètres reçus:", {
+    room: props.room,
     token: props.token,
     hasRoom: !!props.room,
-    hasToken: !!props.token
+    hasToken: !!props.token,
   });
-  
+
   // Afficher tous les paramètres de l'URL
   const urlParams = new URLSearchParams(window.location.search);
-  console.log('Tous les paramètres de l\'URL:', Object.fromEntries(urlParams.entries()));
-  
+  console.log(
+    "Tous les paramètres de l'URL:",
+    Object.fromEntries(urlParams.entries()),
+  );
+
   if (!props.room || !props.token) {
-    const errorMsg = 'Paramètres de salle ou de jeton manquants. Assurez-vous que l\'URL est correcte.';
+    const errorMsg =
+      "Paramètres de salle ou de jeton manquants. Assurez-vous que l'URL est correcte.";
     console.error(errorMsg, { room: props.room, hasToken: !!props.token });
     error.value = errorMsg;
     return;
   }
-  
-  console.log('Tentative de connexion à la room avec les paramètres:', { 
-    room: props.room, 
-    hasToken: !!props.token 
+
+  console.log("Tentative de connexion à la room avec les paramètres:", {
+    room: props.room,
+    hasToken: !!props.token,
   });
-  
+
   try {
     await connectToRoom();
   } catch (err) {
-    console.error('Erreur lors de la connexion à la salle:', err);
-    error.value = 'Impossible de se connecter à la diffusion. Veuillez vérifier le lien et réessayer.';
+    console.error("Erreur lors de la connexion à la salle:", err);
+    error.value =
+      "Impossible de se connecter à la diffusion. Veuillez vérifier le lien et réessayer.";
   }
-  
+
   // Ajouter les écouteurs d'événements pour le déblocage audio
-  document.addEventListener('click', handleInteraction, { once: true });
-  document.addEventListener('touchend', handleInteraction, { once: true });
+  document.addEventListener("click", handleInteraction, { once: true });
+  document.addEventListener("touchend", handleInteraction, { once: true });
 });
 
 // Surveiller les changements de paramètres de route
-watch(() => [props.room, props.token], () => {
-  if (props.room && props.token) {
-    console.log('Nouveaux paramètres détectés:', { room: props.room, token: props.token });
-    connectToRoom();
-  }
-});
+watch(
+  () => [props.room, props.token],
+  () => {
+    if (props.room && props.token) {
+      console.log("Nouveaux paramètres détectés:", {
+        room: props.room,
+        token: props.token,
+      });
+      connectToRoom();
+    }
+  },
+);
 
 // Nettoyage lors du démontage du composant
 onUnmounted(async () => {
-  console.log('Démontage du composant Watch');
-  
+  console.log("Démontage du composant Watch");
+
   // Supprimer les écouteurs d'événements
-  document.removeEventListener('click', handleInteraction);
-  document.removeEventListener('touchend', handleInteraction);
-  
+  document.removeEventListener("click", handleInteraction);
+  document.removeEventListener("touchend", handleInteraction);
+
   // Nettoyer la connexion à la salle si nécessaire
   if (room.value) {
     room.value.disconnect();
   }
-  
+
   // Nettoyer les autres ressources
   await cleanup();
 });

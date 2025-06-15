@@ -1,46 +1,49 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { X } from 'lucide-vue-next'
-import { useNotifications } from '@/stores/notifications'
+import { computed } from "vue";
+import { X } from "lucide-vue-next";
+import { useNotifications } from "@/stores/notifications";
 
 const props = defineProps({
   notification: {
     type: Object as () => {
-      id: string
-      type: 'success' | 'error' | 'info' | 'warning'
-      title: string
-      message: string
+      id: string;
+      type: "success" | "error" | "info" | "warning";
+      title: string;
+      message: string;
     },
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
-const notificationsStore = useNotifications()
+const notificationsStore = useNotifications();
 
 const typeClasses = {
-  success: 'bg-green-50 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-200 dark:border-green-800',
-  error: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800',
-  warning: 'bg-yellow-50 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-800',
-  info: 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-800'
-}
+  success:
+    "bg-green-50 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-200 dark:border-green-800",
+  error:
+    "bg-red-50 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800",
+  warning:
+    "bg-yellow-50 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-800",
+  info: "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-800",
+};
 
 const icon = computed(() => {
   switch (props.notification.type) {
-    case 'success':
-      return 'CheckCircle'
-    case 'error':
-      return 'XCircle'
-    case 'warning':
-      return 'AlertTriangle'
-    case 'info':
+    case "success":
+      return "CheckCircle";
+    case "error":
+      return "XCircle";
+    case "warning":
+      return "AlertTriangle";
+    case "info":
     default:
-      return 'Info'
+      return "Info";
   }
-})
+});
 
 const close = () => {
-  notificationsStore.removeNotification(props.notification.id)
-}
+  notificationsStore.removeNotification(props.notification.id);
+};
 </script>
 
 <template>

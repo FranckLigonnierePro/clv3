@@ -1,5 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+  <div
+    class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8"
+  >
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
       <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
         404 - Page non trouvée
@@ -26,7 +28,9 @@
               d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <h3 class="mt-2 text-lg font-medium text-gray-900">Page introuvable</h3>
+          <h3 class="mt-2 text-lg font-medium text-gray-900">
+            Page introuvable
+          </h3>
           <p class="mt-1 text-sm text-gray-500">
             Désolé, nous n'avons pas trouvé la page que vous recherchez.
           </p>
@@ -58,12 +62,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent } from "vue";
 
 export default defineComponent({
-  name: 'NotFound',
+  name: "NotFound",
   metaInfo: {
-    title: 'Page non trouvée',
+    title: "Page non trouvée",
   },
 });
 </script>

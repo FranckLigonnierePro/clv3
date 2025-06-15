@@ -1,459 +1,515 @@
-import { createRouter, createWebHistory, type RouteLocationNormalized, type NavigationGuardNext, type RouteRecordRaw } from 'vue-router'
-import { supabase } from '@/supabase'
+import {
+  createRouter,
+  createWebHistory,
+  type RouteLocationNormalized,
+  type NavigationGuardNext,
+  type RouteRecordRaw,
+} from "vue-router";
+import { supabase } from "@/supabase";
 
 // Layouts
-import MainLayout from '@/layouts/MainLayout.vue'
-import AuthLayout from '@/layouts/AuthLayout.vue'
+import MainLayout from "@/layouts/MainLayout.vue";
+import AuthLayout from "@/layouts/AuthLayout.vue";
 
 // Vues publiques
-import LandingPage from '@/views/LandingPage.vue'
+import LandingPage from "@/views/LandingPage.vue";
 
 // Vues d'authentification
-import Login from '@/views/auth/Login.vue'
-import Register from '@/views/auth/Register.vue'
-import ForgotPassword from '@/views/auth/ForgotPassword.vue'
-import ResetPassword from '@/views/auth/ResetPassword.vue'
+import Login from "@/views/auth/Login.vue";
+import Register from "@/views/auth/Register.vue";
+import ForgotPassword from "@/views/auth/ForgotPassword.vue";
+import ResetPassword from "@/views/auth/ResetPassword.vue";
 
 // Vues protégées
-import Dashboard from '@/views/Dashboard.vue'
-import Studio from '@/views/Studio.vue'
-import VideoEditor from '@/views/VideoEditor.vue'
-import ReplayPage from '@/views/ReplayPage.vue'
-import Watch from '@/views/Watch.vue'
-import Profile from '@/views/user/Profile.vue'
-import Settings from '@/views/user/Settings.vue'
+import Dashboard from "@/views/Dashboard.vue";
+import Studio from "@/views/Studio.vue";
+import VideoEditor from "@/views/VideoEditor.vue";
+import ReplayPage from "@/views/ReplayPage.vue";
+import Watch from "@/views/Watch.vue";
+import Profile from "@/views/user/Profile.vue";
+import Settings from "@/views/user/Settings.vue";
 
 // Vues d'erreur
-import NotFound from '@/views/errors/NotFound.vue'
-import Unauthorized from '@/views/errors/Unauthorized.vue'
+import NotFound from "@/views/errors/NotFound.vue";
+import Unauthorized from "@/views/errors/Unauthorized.vue";
 
 // Garde de navigation pour les routes protégées
-const requireAuth = async (to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext) => {
+const requireAuth = async (
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized,
+  next: NavigationGuardNext,
+) => {
   try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error) throw error
-    
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) throw error;
+
     if (!user) {
       // Rediriger vers la page de connexion si l'utilisateur n'est pas connecté
-      next({ 
-        name: 'login', 
-        query: { 
-          redirect: to.fullPath !== '/app/dashboard' ? to.fullPath : undefined 
-        } 
-      })
+      next({
+        name: "login",
+        query: {
+          redirect: to.fullPath !== "/app/dashboard" ? to.fullPath : undefined,
+        },
+      });
     } else {
-      next()
+      next();
     }
   } catch (error) {
-    console.error('Erreur lors de la vérification de l\'authentification:', error)
-    next({ name: 'login' })
+    console.error(
+      "Erreur lors de la vérification de l'authentification:",
+      error,
+    );
+    next({ name: "login" });
   }
-}
+};
 
 // Garde de navigation pour les routes d'authentification (empêche l'accès si déjà connecté)
-const redirectIfAuthenticated = async (to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext) => {
+const redirectIfAuthenticated = async (
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized,
+  next: NavigationGuardNext,
+) => {
   try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error) throw error
-    
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) throw error;
+
     if (user) {
       // Rediriger vers le tableau de bord si l'utilisateur est déjà connecté
-      next({ 
-        name: 'dashboard',
-        replace: true // Empêche de revenir à la page de connexion avec le bouton retour
-      })
+      next({
+        name: "dashboard",
+        replace: true, // Empêche de revenir à la page de connexion avec le bouton retour
+      });
     } else {
-      next()
+      next();
     }
   } catch (error) {
-    console.error('Erreur lors de la vérification de l\'authentification:', error)
-    next() // Continuer quand même pour ne pas bloquer l'utilisateur
+    console.error(
+      "Erreur lors de la vérification de l'authentification:",
+      error,
+    );
+    next(); // Continuer quand même pour ne pas bloquer l'utilisateur
   }
-}
+};
 
 // Configuration des routes
 const routes: RouteRecordRaw[] = [
   // Route d'accueil publique
   {
-    path: '/',
-    name: 'home',
+    path: "/",
+    name: "home",
     component: LandingPage,
-    meta: { 
-      title: 'Accueil',
-      public: true
+    meta: {
+      title: "Accueil",
+      public: true,
     },
     beforeEnter: (to, from, next) => {
       // Vérifier si l'utilisateur est connecté
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (user && from.name !== 'home') {
-          next({ name: 'dashboard' })
-        } else {
-          next()
-        }
-      }).catch(() => {
-        next()
-      })
-    }
+      supabase.auth
+        .getUser()
+        .then(({ data: { user } }) => {
+          if (user && from.name !== "home") {
+            next({ name: "dashboard" });
+          } else {
+            next();
+          }
+        })
+        .catch(() => {
+          next();
+        });
+    },
   },
-  
+
   // Route publique pour les lives (doit être avant /app pour éviter les conflits)
   {
-    path: '/watch',
-    name: 'public-watch',
+    path: "/watch",
+    name: "public-watch",
     component: Watch,
-    meta: { 
-      public: true, 
-      title: 'Visionnage en direct',
-      layout: 'empty',
-      noAuth: true // S'assurer que cette route est accessible sans authentification
+    meta: {
+      public: true,
+      title: "Visionnage en direct",
+      layout: "empty",
+      noAuth: true, // S'assurer que cette route est accessible sans authentification
     },
     props: (route) => ({
-      room: route.query.room || '',
-      token: route.query.token || ''
-    })
+      room: route.query.room || "",
+      token: route.query.token || "",
+    }),
   },
-  
+
   // Alias pour la compatibilité
   {
-    path: '/live',
-    redirect: to => ({
-      path: '/watch',
-      query: { 
+    path: "/live",
+    redirect: (to) => ({
+      path: "/watch",
+      query: {
         room: to.query.room,
-        token: to.query.token
-      }
-    })
+        token: to.query.token,
+      },
+    }),
   },
-  
+
   // Routes d'authentification
   {
-    path: '/auth',
+    path: "/auth",
     component: AuthLayout,
     meta: { public: true },
     children: [
       {
-        path: 'login',
-        name: 'login',
+        path: "login",
+        name: "login",
         component: Login,
-        meta: { title: 'Connexion' },
-        beforeEnter: redirectIfAuthenticated
+        meta: { title: "Connexion" },
+        beforeEnter: redirectIfAuthenticated,
       },
       {
-        path: 'register',
-        name: 'register',
+        path: "register",
+        name: "register",
         component: Register,
-        meta: { title: 'Inscription' },
-        beforeEnter: redirectIfAuthenticated
+        meta: { title: "Inscription" },
+        beforeEnter: redirectIfAuthenticated,
       },
       {
-        path: 'forgot-password',
-        name: 'forgot-password',
+        path: "forgot-password",
+        name: "forgot-password",
         component: ForgotPassword,
-        meta: { title: 'Mot de passe oublié' },
-        beforeEnter: redirectIfAuthenticated
+        meta: { title: "Mot de passe oublié" },
+        beforeEnter: redirectIfAuthenticated,
       },
       {
-        path: 'reset-password',
-        name: 'reset-password',
+        path: "reset-password",
+        name: "reset-password",
         component: ResetPassword,
-        meta: { title: 'Réinitialiser le mot de passe' },
+        meta: { title: "Réinitialiser le mot de passe" },
         beforeEnter: redirectIfAuthenticated,
-        props: route => ({
-          accessToken: route.query.access_token as string || ''
-        })
+        props: (route) => ({
+          accessToken: (route.query.access_token as string) || "",
+        }),
       },
       {
-        path: 'verify',
-        name: 'verify-email',
-        component: () => import('@/views/auth/VerifyEmail.vue'),
-        meta: { title: 'Vérification d\'email' },
+        path: "verify",
+        name: "verify-email",
+        component: () => import("@/views/auth/VerifyEmail.vue"),
+        meta: { title: "Vérification d'email" },
         beforeEnter: redirectIfAuthenticated,
-        props: route => ({
-          type: route.query.type as string || 'signup',
-          token: route.query.token as string || ''
-        })
-      }
-    ]
+        props: (route) => ({
+          type: (route.query.type as string) || "signup",
+          token: (route.query.token as string) || "",
+        }),
+      },
+    ],
   },
-  
+
   // Routes protégées avec layout principal
   {
-    path: '/app',
+    path: "/app",
     component: MainLayout,
     meta: { requiresAuth: true },
     children: [
       // Rediriger /app vers /app/dashboard
       {
-        path: '',
-        redirect: { name: 'dashboard' }
+        path: "",
+        redirect: { name: "dashboard" },
       },
       {
-        path: 'dashboard',
-        name: 'dashboard',
+        path: "dashboard",
+        name: "dashboard",
         component: Dashboard,
-        meta: { title: 'Tableau de bord' }
+        meta: { title: "Tableau de bord" },
       },
       {
-        path: 'studio/:id?',
-        name: 'studio',
+        path: "studio/:id?",
+        name: "studio",
         component: Studio,
-        meta: { title: 'Studio de création' },
-        props: route => ({
-          id: route.params.id === 'new' ? undefined : route.params.id
-        })
+        meta: { title: "Studio de création" },
+        props: (route) => ({
+          id: route.params.id === "new" ? undefined : route.params.id,
+        }),
       },
       {
-        path: 'editor/:id',
-        name: 'video-editor',
+        path: "editor/:id",
+        name: "video-editor",
         component: VideoEditor,
-        meta: { title: 'Éditeur vidéo' }
+        meta: { title: "Éditeur vidéo" },
       },
       {
-        path: 'replay/:id',
-        name: 'replay',
+        path: "replay/:id",
+        name: "replay",
         component: ReplayPage,
-        meta: { title: 'Replay' }
+        meta: { title: "Replay" },
       },
       // La route /app/watch a été supprimée pour éviter les conflits avec la route publique /watch
       {
-        path: 'profile',
-        name: 'profile',
+        path: "profile",
+        name: "profile",
         component: Profile,
-        meta: { title: 'Mon profil' }
+        meta: { title: "Mon profil" },
       },
       {
-        path: 'settings',
-        name: 'settings',
+        path: "settings",
+        name: "settings",
         component: Settings,
-        meta: { title: 'Paramètres' }
+        meta: { title: "Paramètres" },
       },
       // Redirections et compatibilité
       {
-        path: 'builder/:id?',
-        redirect: to => ({
-          name: 'studio',
-          params: { id: to.params.id || 'new' }
-        })
+        path: "builder/:id?",
+        redirect: (to) => ({
+          name: "studio",
+          params: { id: to.params.id || "new" },
+        }),
       },
       {
-        path: 'live/:id',
-        redirect: to => `/app/studio/${to.params.id}`
+        path: "live/:id",
+        redirect: (to) => `/app/studio/${to.params.id}`,
       },
       // Redirection pour les anciennes URL
       {
-        path: '/studio/:id?',
-        redirect: to => ({
-          name: 'studio',
-          params: { id: to.params.id || 'new' }
-        })
+        path: "/studio/:id?",
+        redirect: (to) => ({
+          name: "studio",
+          params: { id: to.params.id || "new" },
+        }),
       },
       {
-        path: '/dashboard',
-        redirect: { name: 'dashboard' }
-      }
-    ]
+        path: "/dashboard",
+        redirect: { name: "dashboard" },
+      },
+    ],
   },
   // Les routes /watch et /live ont été déplacées au début du routeur pour éviter les conflits
-  
+
   // Routes d'erreur
   {
-    path: '/404',
-    name: 'not-found',
+    path: "/404",
+    name: "not-found",
     component: NotFound,
-    meta: { public: true, title: 'Page non trouvée' }
+    meta: { public: true, title: "Page non trouvée" },
   },
   {
-    path: '/403',
-    name: 'unauthorized',
+    path: "/403",
+    name: "unauthorized",
     component: Unauthorized,
-    meta: { public: true, title: 'Accès non autorisé' }
+    meta: { public: true, title: "Accès non autorisé" },
   },
-  
+
   // Redirection 404 - Doit être la dernière route
   {
-    path: '/:pathMatch(.*)*',
-    redirect: '/404'
-  }
-]
+    path: "/:pathMatch(.*)*",
+    redirect: "/404",
+  },
+];
 
 // Création du routeur
 const router = createRouter({
   // Forcer le mode history avec une base propre
-  history: createWebHistory('/'),
+  history: createWebHistory("/"),
   routes,
-  
+
   // Log de la configuration des routes pour le débogage
   onBeforeRouteLeave: (to, from, next) => {
-    console.log('Configuration des routes:', JSON.stringify(routes, null, 2));
+    console.log("Configuration des routes:", JSON.stringify(routes, null, 2));
     next();
   },
   scrollBehavior(to, from, savedPosition) {
     // Faire défiler vers le haut lors du changement de route
     if (savedPosition) {
-      return savedPosition
+      return savedPosition;
     } else {
-      return { top: 0, behavior: 'smooth' }
+      return { top: 0, behavior: "smooth" };
     }
-  }
-})
+  },
+});
 
 // Vérifier la configuration du routeur
-console.log('Configuration du routeur:', {
+console.log("Configuration du routeur:", {
   current: router.currentRoute.value,
   options: router.options,
-  hasWatchRoute: router.hasRoute('public-watch')
+  hasWatchRoute: router.hasRoute("public-watch"),
 });
 
 // Vérifier la configuration de l'historique
-console.log('Configuration de l\'historique:', {
+console.log("Configuration de l'historique:", {
   location: window.location,
   history: {
     length: window.history.length,
-    state: window.history.state
-  }
+    state: window.history.state,
+  },
 });
 
 // Vérifier la configuration du routeur
-console.log('=== ROUTER CONFIGURATION ===');
-console.log('Routes enregistrées:', router.getRoutes().map(r => ({
-  path: r.path,
-  name: r.name,
-  meta: r.meta,
-  regexp: r.regexp?.toString(),
-  components: r.components ? Object.keys(r.components) : []
-})));
+console.log("=== ROUTER CONFIGURATION ===");
+console.log(
+  "Routes enregistrées:",
+  router.getRoutes().map((r) => ({
+    path: r.path,
+    name: r.name,
+    meta: r.meta,
+    regexp: r.regexp?.toString(),
+    components: r.components ? Object.keys(r.components) : [],
+  })),
+);
 
 // Afficher la configuration complète du routeur
-console.log('=== ROUTER FULL CONFIGURATION ===');
-console.log(JSON.stringify({
-  currentRoute: router.currentRoute.value,
-  options: {
-    ...router.options,
-    // Éviter les références circulaires dans les logs
-    routes: router.options.routes.map(r => ({
-      path: r.path,
-      name: r.name,
-      meta: r.meta,
-      component: r.component ? 'Component' : 'undefined',
-      children: r.children ? '[...]' : 'none'
-    }))
-  },
-  hasWatchRoute: router.hasRoute('public-watch'),
-  hasAppWatchRoute: router.hasRoute('watch')
-}, null, 2));
+console.log("=== ROUTER FULL CONFIGURATION ===");
+console.log(
+  JSON.stringify(
+    {
+      currentRoute: router.currentRoute.value,
+      options: {
+        ...router.options,
+        // Éviter les références circulaires dans les logs
+        routes: router.options.routes.map((r) => ({
+          path: r.path,
+          name: r.name,
+          meta: r.meta,
+          component: r.component ? "Component" : "undefined",
+          children: r.children ? "[...]" : "none",
+        })),
+      },
+      hasWatchRoute: router.hasRoute("public-watch"),
+      hasAppWatchRoute: router.hasRoute("watch"),
+    },
+    null,
+    2,
+  ),
+);
 
 // Navigation guard globale
 router.beforeEach(async (to, from, next) => {
-  console.log('=== NAVIGATION START ===');
-  console.log('De:', from.path, '->', 'Vers:', to.path);
-  console.log('URL complète:', window.location.href);
-  console.log('Configuration du routeur:', {
+  console.log("=== NAVIGATION START ===");
+  console.log("De:", from.path, "->", "Vers:", to.path);
+  console.log("URL complète:", window.location.href);
+  console.log("Configuration du routeur:", {
     currentRoute: router.currentRoute.value,
-    hasRoute: router.hasRoute('public-watch'),
-    getRoutes: router.getRoutes().map(r => ({
+    hasRoute: router.hasRoute("public-watch"),
+    getRoutes: router.getRoutes().map((r) => ({
       path: r.path,
       name: r.name,
-      meta: r.meta
-    }))
+      meta: r.meta,
+    })),
   });
   try {
     // Définir le titre de la page
-    const title = to.meta.title as string || 'ClipLive'
-    document.title = title === 'ClipLive' ? title : `${title} | ClipLive`
-    
+    const title = (to.meta.title as string) || "ClipLive";
+    document.title = title === "ClipLive" ? title : `${title} | ClipLive`;
+
     // Vérifier si la route est publique ou nécessite une authentification
-    console.log('Navigation vers:', to.path, 'fullPath:', to.fullPath, 'meta:', to.meta);
-    console.log('Routes correspondantes:', to.matched.map(m => ({
-      path: m.path,
-      name: m.name,
-      meta: m.meta
-    })));
-    
-    const isPublic = to.meta.public === true
-    const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
-    const isAuthRoute = to.matched.some(record => record.path.startsWith('/auth'))
-    
-    console.log('Valeurs de routage:', {
+    console.log(
+      "Navigation vers:",
+      to.path,
+      "fullPath:",
+      to.fullPath,
+      "meta:",
+      to.meta,
+    );
+    console.log(
+      "Routes correspondantes:",
+      to.matched.map((m) => ({
+        path: m.path,
+        name: m.name,
+        meta: m.meta,
+      })),
+    );
+
+    const isPublic = to.meta.public === true;
+    const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+    const isAuthRoute = to.matched.some((record) =>
+      record.path.startsWith("/auth"),
+    );
+
+    console.log("Valeurs de routage:", {
       isPublic,
       requiresAuth,
       isAuthRoute,
       meta: to.meta,
       path: to.path,
       fullPath: to.fullPath,
-      matched: to.matched.length > 0
+      matched: to.matched.length > 0,
     });
-    
+
     // Récupérer l'utilisateur actuel de manière sécurisée
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
     if (error) {
-      console.error('Erreur lors de la récupération de l\'utilisateur:', error)
+      console.error("Erreur lors de la récupération de l'utilisateur:", error);
       // En cas d'erreur, on considère que l'utilisateur n'est pas authentifié
       if (requiresAuth) {
         return next({
-          name: 'login',
-          query: { 
-            redirect: to.fullPath !== '/app/dashboard' ? to.fullPath : undefined,
-            error: 'auth_error'
-          }
-        })
+          name: "login",
+          query: {
+            redirect:
+              to.fullPath !== "/app/dashboard" ? to.fullPath : undefined,
+            error: "auth_error",
+          },
+        });
       }
-      return next()
+      return next();
     }
-    
+
     // Si l'utilisateur est sur une route protégée et n'est pas connecté
     if (requiresAuth && !user) {
       return next({
-        name: 'login',
-        query: { 
-          redirect: to.fullPath !== '/app/dashboard' ? to.fullPath : undefined,
-          reason: 'auth_required'
+        name: "login",
+        query: {
+          redirect: to.fullPath !== "/app/dashboard" ? to.fullPath : undefined,
+          reason: "auth_required",
         },
-        replace: true
-      })
+        replace: true,
+      });
     }
-    
+
     // Si l'utilisateur est connecté et essaie d'accéder à une route d'authentification
     if (isAuthRoute && user) {
-      return next({ 
-        name: 'dashboard',
-        replace: true
-      })
+      return next({
+        name: "dashboard",
+        replace: true,
+      });
     }
-    
+
     // Ne pas rediriger si c'est une route publique ou marquée comme ne nécessitant pas d'authentification
     if (isPublic) {
-      console.log('Route publique détectée, accès autorisé sans authentification')
-      return next()
+      console.log(
+        "Route publique détectée, accès autorisé sans authentification",
+      );
+      return next();
     }
-    
+
     // Rediriger la racine vers le tableau de bord si l'utilisateur est connecté
     // Ne pas rediriger si c'est une requête de navigation initiale
-    if (to.path === '/' && user && from !== router.resolve({ name: 'home' })) {
-      return next({ 
-        name: 'dashboard',
-        replace: true
-      })
+    if (to.path === "/" && user && from !== router.resolve({ name: "home" })) {
+      return next({
+        name: "dashboard",
+        replace: true,
+      });
     }
-    
-    next()
+
+    next();
   } catch (error) {
-    console.error('Erreur dans le garde de navigation globale:', error)
+    console.error("Erreur dans le garde de navigation globale:", error);
     // En cas d'erreur inattendue, rediriger vers la page d'accueil
-    if (to.path !== '/') {
-      next('/')
+    if (to.path !== "/") {
+      next("/");
     } else {
-      next()
+      next();
     }
   }
-})
+});
 
 // Gestion des erreurs de navigation
-router.onError(error => {
-  console.error('Erreur de navigation:', error)
+router.onError((error) => {
+  console.error("Erreur de navigation:", error);
   // Vous pourriez rediriger vers une page d'erreur ici
-})
+});
 
-export default router
+export default router;

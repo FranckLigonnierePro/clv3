@@ -1,27 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { ChevronDown } from 'lucide-vue-next'
+import { ref } from "vue";
+import { ChevronDown } from "lucide-vue-next";
 
 interface Props {
-  currentScene: number
-  maxScenes: number
+  currentScene: number;
+  maxScenes: number;
 }
 
 interface Emits {
-  (e: 'switch-scene', sceneNumber: number): void
+  (e: "switch-scene", sceneNumber: number): void;
 }
 
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
+const props = defineProps<Props>();
+const emit = defineEmits<Emits>();
 
-const isOpen = ref(false)
+const isOpen = ref(false);
 
-const scenes = Array.from({ length: props.maxScenes }, (_, i) => i + 1)
+const scenes = Array.from({ length: props.maxScenes }, (_, i) => i + 1);
 
 const selectScene = (sceneNumber: number) => {
-  emit('switch-scene', sceneNumber)
-  isOpen.value = false
-}
+  emit("switch-scene", sceneNumber);
+  isOpen.value = false;
+};
 </script>
 
 <template>
@@ -51,10 +51,6 @@ const selectScene = (sceneNumber: number) => {
     </div>
 
     <!-- Backdrop -->
-    <div
-      v-if="isOpen"
-      @click="isOpen = false"
-      class="fixed inset-0 z-40"
-    ></div>
+    <div v-if="isOpen" @click="isOpen = false" class="fixed inset-0 z-40"></div>
   </div>
 </template>

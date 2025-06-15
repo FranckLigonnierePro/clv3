@@ -1,5 +1,7 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+  <div
+    class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8"
+  >
     <div class="max-w-md w-full space-y-8">
       <div>
         <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
@@ -12,7 +14,9 @@
       <div v-if="!isVerified" class="mt-8 space-y-6">
         <div class="rounded-md shadow-sm -space-y-px">
           <div>
-            <label for="verification-code" class="sr-only">Verification Code</label>
+            <label for="verification-code" class="sr-only"
+              >Verification Code</label
+            >
             <input
               id="verification-code"
               v-model="verificationCode"
@@ -36,7 +40,9 @@
         </div>
       </div>
       <div v-else class="text-center">
-        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+        <div
+          class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100"
+        >
           <svg
             class="h-6 w-6 text-green-600"
             fill="none"
@@ -54,7 +60,8 @@
         </div>
         <h3 class="mt-3 text-lg font-medium text-gray-900">Email Verified!</h3>
         <p class="mt-2 text-sm text-gray-500">
-          Your email has been successfully verified. You can now access all features.
+          Your email has been successfully verified. You can now access all
+          features.
         </p>
         <div class="mt-6">
           <router-link
@@ -70,43 +77,44 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { useAuthStore } from '@/stores/auth';
+import { defineComponent, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
 
 export default defineComponent({
-  name: 'VerifyEmail',
+  name: "VerifyEmail",
   setup() {
     const route = useRoute();
     const router = useRouter();
     const authStore = useAuthStore();
-    
-    const verificationCode = ref('');
+
+    const verificationCode = ref("");
     const isVerified = ref(false);
     const isLoading = ref(false);
-    const error = ref('');
+    const error = ref("");
 
     const verifyEmail = async () => {
       if (!verificationCode.value) {
-        error.value = 'Please enter the verification code';
+        error.value = "Please enter the verification code";
         return;
       }
 
       isLoading.value = true;
-      error.value = '';
+      error.value = "";
 
       try {
         // TODO: Implement actual email verification API call
         // await authStore.verifyEmail(verificationCode.value);
-        
+
         // For demo purposes, we'll just set isVerified to true after a short delay
         setTimeout(() => {
           isVerified.value = true;
           isLoading.value = false;
         }, 1000);
-        
       } catch (err) {
-        error.value = err.response?.data?.message || 'Failed to verify email. Please try again.';
+        error.value =
+          err.response?.data?.message ||
+          "Failed to verify email. Please try again.";
         isLoading.value = false;
       }
     };
