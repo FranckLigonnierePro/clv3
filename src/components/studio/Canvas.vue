@@ -4,7 +4,6 @@ import {
   onMounted,
   onUnmounted,
   watch,
-  nextTick,
   onBeforeUnmount,
 } from "vue";
 
@@ -46,7 +45,6 @@ const props = withDefaults(
   defineProps<{
     elements: CanvasElement[];
     format: "16:9" | "9:16";
-    selectedElement: string | undefined;
     snapEnabled: boolean;
     isLive?: boolean;
     showGrid?: boolean;
@@ -62,7 +60,6 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (e: "element-select", id: string | undefined): void;
   (e: "element-update", element: CanvasElement): void;
   (e: "element-edit", element: CanvasElement): void;
   (e: "element-delete", id: string): void;
@@ -96,7 +93,7 @@ const canvasDimensions = ref({
 const updateCanvasSize = () => {
   const padding = 32;
   const screenWidth = window.innerWidth - padding;
-  const screenHeight = window.innerHeight - 178 - padding;
+  const screenHeight = window.innerHeight - 192 - padding;
 
   const targetRatio = props.format === "9:16" ? 9 / 16 : 16 / 9;
 
@@ -425,7 +422,6 @@ function handleMouseDown(e: MouseEvent) {
       dragStartY.value = y;
       elementStartX.value = el.x;
       elementStartY.value = el.y;
-      emit("element-select", el.id);
       break;
     }
   }
@@ -463,41 +459,9 @@ function handleMouseMove(e: MouseEvent) {
   }
 }
 
-function handleMouseUp(e: MouseEvent) {
+function handleMouseUp() {
   isDragging.value = false;
   draggedElement.value = null;
-
-  // Si on est en train d'éditer, on ne fait rien
-  if (editingText.value) return;
-
-  // Si c'est un double-clic sur un élément texte, on active l'édition
-  if (e.detail === 2 && !props.isLive) {
-    const element = props.elements.find(
-      (el) => el.id === props.selectedElement,
-    );
-    if (element?.type === "text") {
-      editingText.value = {
-        elementId: element.id,
-        x: element.x,
-        y: element.y,
-        width: element.width,
-        height: element.height,
-        content: element.data.content || "",
-        color: element.data.color || "#ffffff",
-        fontSize: element.data.fontSize || 24,
-      };
-      // On force le focus sur le champ de saisie après un court délai
-      nextTick(() => {
-        const input = document.getElementById(
-          "text-edit-input",
-        ) as HTMLInputElement;
-        if (input) {
-          input.focus();
-          input.select();
-        }
-      });
-    }
-  }
 }
 
 // Sauvegarder les modifications du texte
@@ -560,8 +524,6 @@ function handleTouchStart(e: TouchEvent) {
 
     // Éviter le défilement de la page
     e.preventDefault();
-  } else {
-    emit("element-select", undefined);
   }
 }
 
@@ -630,7 +592,7 @@ defineExpose({
 <template>
   <div
     ref="containerRef"
-    class="relative w-full h-full flex items-center justify-center p-4"
+    class="relative w-full h-full flex items-center justify-center"
   >
     <!-- Canvas principal -->
     <canvas
@@ -725,32 +687,6 @@ defineExpose({
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Indicateur de sélection -->
-    <div
-      v-if="selectedElement && !isLive"
-      class="absolute border-2 border-blue-400 pointer-events-none"
-      :style="{
-        left: `${props.elements.find((el) => el.id === selectedElement)?.x}px`,
-        top: `${props.elements.find((el) => el.id === selectedElement)?.y}px`,
-        width: `${props.elements.find((el) => el.id === selectedElement)?.width}px`,
-        height: `${props.elements.find((el) => el.id === selectedElement)?.height}px`,
-        transform: `rotate(${props.elements.find((el) => el.id === selectedElement)?.rotation || 0}deg)`,
-      }"
-    >
-      <div
-        class="absolute -top-1 -left-1 w-2 h-2 bg-blue-400 rounded-full"
-      ></div>
-      <div
-        class="absolute -top-1 -right-1 w-2 h-2 bg-blue-400 rounded-full"
-      ></div>
-      <div
-        class="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-400 rounded-full"
-      ></div>
-      <div
-        class="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-400 rounded-full"
-      ></div>
     </div>
   </div>
 </template>

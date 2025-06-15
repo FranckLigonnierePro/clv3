@@ -9,10 +9,12 @@ import {
   LogOut,
   Settings,
   Video,
-  Plus,
+  Bell,
   Home,
-  Search,
+  Share2,
+  Check
 } from "lucide-vue-next";
+import { useRoute } from 'vue-router';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -23,8 +25,29 @@ const userInitials = computed(() => {
   return authStore.user.email.charAt(0).toUpperCase();
 });
 
+const route = useRoute();
+const isStudioView = computed(() => route.name === 'studio');
+const isLinkCopied = ref(false);
+
 const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value;
+};
+
+const copyLiveLink = async () => {
+  const currentUrl = window.location.origin;
+  const watchUrl = `${currentUrl}/watch/${Date.now()}`; // Utilise un ID unique basé sur le timestamp
+  
+  try {
+    await navigator.clipboard.writeText(watchUrl);
+    isLinkCopied.value = true;
+    
+    // Réinitialiser l'état après 3 secondes
+    setTimeout(() => {
+      isLinkCopied.value = false;
+    }, 3000);
+  } catch (err) {
+    console.error('Erreur lors de la copie du lien:', err);
+  }
 };
 
 const handleLogout = async () => {
@@ -197,8 +220,61 @@ const isActive = (item: { activeRoutes?: string[] }) => {
           </template>
         </div>
 
+        <!-- Bouton de partage (uniquement sur la vue Studio) -->
+        <div v-if="isStudioView" class="hidden sm:flex items-center mr-4">
+          <button
+            @click="copyLiveLink"
+            class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            :title="isLinkCopied ? 'Lien copié !' : 'Partager le lien du live'"
+          >
+            <component :is="isLinkCopied ? Check : Share2" class="h-5 w-5" />
+            <span>{{ isLinkCopied ? 'Copié !' : 'Partager' }}</span>
+          </button>
+        </div>
+
+        <!-- Menu utilisateur desktop -->
+        <div class="hidden sm:ml-6 sm:flex sm:items-center">
+          <!-- Bouton de notification -->
+          <button
+            type="button"
+            class="p-1 rounded-full text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white mr-4"
+          >
+            <span class="sr-only">Voir les notifications</span>
+            <Bell class="h-6 w-6" />
+          </button>
+
+          <!-- Menu profil -->
+          <div class="ml-3 relative">
+            <button
+              @click="isMobileMenuOpen = !isMobileMenuOpen"
+              class="flex items-center max-w-xs text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              id="user-menu"
+              aria-expanded="false"
+              aria-haspopup="true"
+            >
+              <span class="sr-only">Ouvrir le menu utilisateur</span>
+              <div
+                class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium"
+              >
+                {{ userInitials }}
+              </div>
+            </button>
+          </div>
+        </div>
+
         <!-- Bouton menu mobile -->
         <div class="-mr-2 flex items-center sm:hidden">
+          <!-- Bouton de partage version mobile (uniquement sur la vue Studio) -->
+          <button
+            v-if="isStudioView"
+            @click="copyLiveLink"
+            class="p-2 mr-2 text-white bg-blue-600 rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            :title="isLinkCopied ? 'Lien copié !' : 'Partager le lien du live'"
+          >
+            <component :is="isLinkCopied ? Check : Share2" class="h-5 w-5" />
+            <span class="sr-only">Partager le live</span>
+          </button>
+          
           <button
             @click="toggleMobileMenu"
             type="button"
@@ -223,14 +299,14 @@ const isActive = (item: { activeRoutes?: string[] }) => {
         <router-link
           v-for="item in navItems"
           :key="item.name"
-          :to="item.path"
+          :to="item.to"
           @click="isMobileMenuOpen = false"
           class="flex items-center px-3 py-2 text-base font-medium rounded-md"
           :class="{
             'bg-indigo-50 border-indigo-500 text-indigo-700':
-              $route.path.startsWith(item.path) && item.path !== '/',
+              isActive(item),
             'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800':
-              !$route.path.startsWith(item.path) || item.path === '/',
+              !isActive(item),
           }"
         >
           <component :is="item.icon" class="mr-3 h-5 w-5" />
@@ -261,7 +337,7 @@ const isActive = (item: { activeRoutes?: string[] }) => {
           <template v-for="item in userMenuItems" :key="item.name">
             <router-link
               v-if="!item.action"
-              :to="item.path"
+              :to="item.to"
               @click="isMobileMenuOpen = false"
               class="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
             >

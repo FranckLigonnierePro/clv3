@@ -3,16 +3,8 @@ import { ref, onMounted, onUnmounted } from "vue";
 import Canvas from "../components/studio/Canvas.vue";
 import LeftPanel from "../components/studio/LeftPanel.vue";
 import ChatSidebar from "../components/studio/ChatSidebar.vue";
-import {
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  Circle,
-  CircleDot,
-  Save,
-  MessageSquare,
-} from "lucide-vue-next";
+import { Grid2X2, Magnet } from "lucide-vue-next";
+import StudioFooter from "../components/studio/StudioFooter.vue";
 import type { CanvasElement } from "../components/studio/Canvas.vue";
 
 onMounted(() => {
@@ -86,9 +78,8 @@ const createTextElement = (): CanvasElement => {
 // Références
 const canvasRef = ref<InstanceType<typeof Canvas> | null>(null);
 
-// Éléments du canvas
+// Éléments du canvas (sera remplacé lors du changement de scène)
 const elements = ref<CanvasElement[]>([]);
-const selectedElement = ref<string | undefined>(undefined);
 
 // Fonction pour mettre à jour un élément
 const updateElement = (updatedElement: CanvasElement) => {
@@ -101,19 +92,12 @@ const updateElement = (updatedElement: CanvasElement) => {
 };
 
 // Gestion des événements du canvas
-const handleElementSelect = (id: string | undefined) => {
-  selectedElement.value = id;
-};
-
 const handleElementUpdate = (element: CanvasElement) => {
   updateElement(element);
 };
 
 const handleElementDelete = (id: string) => {
   elements.value = elements.value.filter((el) => el.id !== id);
-  if (selectedElement.value === id) {
-    selectedElement.value = undefined;
-  }
 };
 // Format du canvas (16:9 ou 9:16)
 const format = ref<"16:9" | "9:16">("16:9");
@@ -151,13 +135,53 @@ const toggleCamera = () => {
   // Ajouter ici la logique pour activer/désactiver la caméra
 };
 
+// Gestion des scènes
+const scenes = ref([
+  { id: 1, name: 'Scène 1', active: true },
+  { id: 2, name: 'Scène 2', active: false },
+  { id: 3, name: 'Scène 3', active: false },
+  { id: 4, name: 'Scène 4', active: false },
+]);
+
+const currentSceneId = ref(1);
+// Stockage des éléments par scène
+const sceneElements = ref<{[key: number]: CanvasElement[]}>({});
+
+// Initialiser les éléments vides pour chaque scène existante
+onMounted(() => {
+  scenes.value.forEach(scene => {
+    if (!sceneElements.value[scene.id]) {
+      sceneElements.value[scene.id] = [];
+    }
+  });
+});
+
+const changeScene = (sceneId: number) => {
+  // Sauvegarder les éléments de la scène courante
+  if (currentSceneId.value) {
+    sceneElements.value[currentSceneId.value] = [...elements.value];
+  }
+  
+  // Changer de scène
+  currentSceneId.value = sceneId;
+  
+  // Charger les éléments de la nouvelle scène
+  if (!sceneElements.value[sceneId]) {
+    sceneElements.value[sceneId] = [];
+  }
+  elements.value = [...sceneElements.value[sceneId]];
+  
+  // Mettre à jour l'état actif des scènes
+  scenes.value = scenes.value.map(scene => ({
+    ...scene,
+    active: scene.id === sceneId
+  }));
+};
+
+// Pas de fonction d'ajout de scène - 4 scènes fixes
+
 // UI State
 const showLeftPanel = ref(true);
-
-// Fonction pour basculer l'affichage de la grille
-const toggleGrid = () => {
-  showGrid.value = !showGrid.value;
-};
 const showChat = ref(false);
 const messages = ref<
   Array<{ id: string; text: string; sender: string; time: string }>
@@ -200,7 +224,6 @@ const saveProject = () => {
 const addTextElement = () => {
   const newElement = createTextElement();
   elements.value = [...elements.value, newElement];
-  selectedElement.value = newElement.id;
 };
 
 const addImageElement = () => {
@@ -232,7 +255,6 @@ const addShapeElement = (shape: "rectangle" | "circle") => {
     },
   };
   elements.value = [...elements.value, newElement];
-  selectedElement.value = newElement.id;
 };
 </script>
 
@@ -242,37 +264,56 @@ const addShapeElement = (shape: "rectangle" | "circle") => {
     <LeftPanel
       :show-panel="showLeftPanel"
       :elements="elements"
-      :selected-element="selectedElement"
       :show-grid="showGrid"
       @add-text="addTextElement"
       @add-image="addImageElement"
       @add-video="addVideoElement"
       @add-shape="addShapeElement"
-      @select-element="handleElementSelect"
       @toggle-grid="showGrid = !showGrid"
     />
 
     <!-- Main content -->
-    <div
-      class="flex-1 flex flex-col h-full overflow-hidden ml-0 transition-all duration-300"
-    >
-      <div
-        class="canvas-container flex justify-center items-center p-4 min-h-0 overflow-hidden w-full"
-      >
-        <Canvas
-          ref="canvasRef"
-          :elements="elements"
-          :show-grid="showGrid"
-          :grid-size="gridSize"
-          :grid-color="gridColor"
-          :format="format"
-          :selected-element="selectedElement"
-          :snap-enabled="snapEnabled"
-          :is-live="isLive"
-          @element-select="handleElementSelect"
-          @element-update="handleElementUpdate"
-          @element-delete="handleElementDelete"
-        />
+    <div class="flex-1 flex flex-col h-full overflow-hidden ml-0 transition-all duration-300">
+      <div class="flex flex-col items-center w-full p-4 pb-0">
+        <!-- Conteneur des boutons au-dessus du canvas -->
+        <div class="w-full flex justify-center mb-2 gap-2" :style="{ maxWidth: format === '16:9' ? 'calc(100vh * 16/9 - 6rem)' : 'calc(100vh * 9/16 - 6rem)' }">
+          <!-- Bouton Aimant -->
+          <button
+            @click="snapEnabled = !snapEnabled"
+            class="p-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm transition-colors shadow-lg"
+            :class="{ 'bg-blue-500/20 text-blue-400': snapEnabled }"
+            title="Aimant (Snap to Grid)"
+          >
+            <Magnet class="w-5 h-5" />
+          </button>
+          
+          <!-- Bouton Grille -->
+          <button
+            @click="showGrid = !showGrid"
+            class="p-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm transition-colors shadow-lg"
+            :class="{ 'bg-blue-500/20 text-blue-400': showGrid }"
+            title="Afficher la grille"
+          >
+            <Grid2X2 class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Canvas -->
+        <div class="relative w-full" :style="{ width: format === '16:9' ? 'calc(100vh * 16/9 - 6rem)' : 'calc(100vh * 9/16 - 6rem)' }">
+          
+          <Canvas
+            ref="canvasRef"
+            :elements="elements"
+            :show-grid="showGrid"
+            :grid-size="gridSize"
+            :grid-color="gridColor"
+            :format="format"
+            :snap-enabled="snapEnabled"
+            :is-live="isLive"
+            @element-update="handleElementUpdate"
+            @element-delete="handleElementDelete"
+          />
+        </div>
       </div>
     </div>
 
@@ -284,72 +325,22 @@ const addShapeElement = (shape: "rectangle" | "circle") => {
       @send-message="sendMessage"
     />
 
-    <footer
-      class="fixed bottom-0 w-full h-20 bg-zinc-950 backdrop-blur flex justify-between items-center px-8 z-50"
-    >
-      <div class="controls-left">
-        <button
-          class="control-button"
-          :class="{ 'control-active': isMicrophoneOn }"
-          @click="toggleMicrophone"
-          title="Microphone"
-        >
-          <component :is="isMicrophoneOn ? Mic : MicOff" class="w-5 h-5" />
-        </button>
-        <button
-          class="control-button"
-          :class="{ 'control-active': isCameraOn }"
-          @click="toggleCamera"
-          title="Caméra"
-        >
-          <component :is="isCameraOn ? Video : VideoOff" class="w-5 h-5" />
-        </button>
-      </div>
-
-      <div class="controls-center">
-        <button
-          class="live-button"
-          :class="{ 'live-active': isLive }"
-          @click="toggleLive"
-        >
-          <span v-if="!isLive">GO LIVE</span>
-          <span v-else>LIVE</span>
-          <span v-if="isLive" class="record-dot animate-pulse"></span>
-        </button>
-
-        <button
-          class="record-button"
-          :class="{ recording: isRecording }"
-          @click="toggleRecording"
-        >
-          <component :is="isRecording ? CircleDot : Circle" class="w-5 h-5" />
-          <span>{{ isRecording ? "Arrêter" : "Enregistrer" }}</span>
-        </button>
-      </div>
-
-      <div class="controls-right flex items-center gap-4">
-        <button
-          class="control-button relative"
-          @click="toggleChat"
-          title="Ouvrir le chat"
-        >
-          <MessageSquare class="w-5 h-5" />
-          <span
-            v-if="messages.length > 0"
-            class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center"
-          >
-            {{ messages.length }}
-          </span>
-        </button>
-        <button
-          class="control-button"
-          @click="saveProject"
-          title="Enregistrer le projet"
-        >
-          <Save class="w-5 h-5" />
-        </button>
-      </div>
-    </footer>
+    <StudioFooter
+      :is-microphone-on="isMicrophoneOn"
+      :is-camera-on="isCameraOn"
+      :is-live="isLive"
+      :is-recording="isRecording"
+      :messages="messages"
+      :scenes="scenes"
+      :current-scene-id="currentSceneId"
+      @toggle-microphone="toggleMicrophone"
+      @toggle-camera="toggleCamera"
+      @toggle-live="toggleLive"
+      @toggle-recording="toggleRecording"
+      @toggle-chat="toggleChat"
+      @change-scene="changeScene"
+      @save-project="saveProject"
+    />
   </div>
 </template>
 
@@ -449,69 +440,6 @@ const addShapeElement = (shape: "rectangle" | "circle") => {
 .record-button {
   padding: 0.75rem 1.5rem;
   border-radius: 24px;
-  border: none;
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
-}
-
-.live-button {
-  background: #ef4444;
-  color: white;
-}
-
-.live-button:hover {
-  background: #dc2626;
-  transform: scale(1.05);
-}
-
-.live-active {
-  background: #22c55e;
-}
-
-.live-active:hover {
-  background: #16a34a;
-}
-
-.record-button {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-}
-
-.record-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
-}
-
-.recording {
-  background: #ef4444;
-}
-
-.record-dot {
-  width: 12px;
-  height: 12px;
-  background: white;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-.animate-pulse {
   animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 </style>
