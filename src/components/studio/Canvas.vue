@@ -54,7 +54,7 @@ const props = withDefaults(
   {
     showGrid: true,
     gridSize: 20,
-    gridColor: "rgba(255, 255, 255, 0.1)",
+    gridColor: "rgba(139, 92, 246, 0.5)",
     isLive: false,
   },
 );
@@ -229,51 +229,47 @@ onUnmounted(() => {
 // Dessin du canvas à chaque frame
 let animationFrame: number;
 
-// Fonction pour dessiner la grille
+// Fonction pour dessiner la grille avec des points aux intersections
 const drawGrid = (ctx: CanvasRenderingContext2D) => {
   if (!props.showGrid) return;
-
+  
   const { width, height } = canvasDimensions.value;
-
-  // Calculer la taille de la grille en fonction de la taille du canvas
-  // On vise environ 20-30 mailles dans la plus grande dimension
-  const baseSize = Math.max(width, height);
-  const targetCells = 15; // Nombre cible de cellules dans la plus grande dimension
-  let size = Math.max(10, Math.floor(baseSize / targetCells / 10) * 10); // Arrondir à la dizaine la plus proche
-
-  // Ajuster la taille minimale et maximale de la grille
-  size = Math.max(20, Math.min(100, size));
-
-  const dotColor = "#8b5cf6"; // Couleur violette pour les points
-  const dotSize = 2; // Taille des points
-
-  ctx.save();
-
-  // Dessiner les points aux intersections
-  ctx.fillStyle = dotColor;
-
-  // Calculer le nombre de points nécessaires
-  const cols = Math.ceil(width / size) + 1;
-  const rows = Math.ceil(height / size) + 1;
-
-  // Ajuster pour centrer la grille si nécessaire
-  const offsetX = (width % size) / 2;
-  const offsetY = (height % size) / 2;
-
-  // Dessiner les points aux intersections
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const posX = Math.round(offsetX + x * size);
-      const posY = Math.round(offsetY + y * size);
-
-      // Dessiner un point arrondi
-      ctx.beginPath();
-      ctx.arc(posX, posY, dotSize / 2, 0, Math.PI * 2);
-      ctx.fill();
+  
+  // Nombre fixe de cellules (32x18)
+  const cellCountX = 32; // Largeur en cellules
+  const cellCountY = 18; // Hauteur en cellules
+  
+  // Calculer la taille des cellules pour s'adapter au canvas
+  const cellWidth = width / cellCountX;
+  const cellHeight = height / cellCountY;
+  
+  // Style des points de grille
+  ctx.fillStyle = props.gridColor || 'rgba(139, 92, 246, 0.5)'; // Violet avec 50% d'opacité
+  const pointSize = 1.5; // Taille des points
+  
+  // Dessiner des points à chaque intersection de la grille
+  for (let x = 0; x <= cellCountX; x++) {
+    for (let y = 0; y <= cellCountY; y++) {
+      // Ne pas dessiner de point sur le contour extérieur
+      if (x > 0 && x < cellCountX && y > 0 && y < cellCountY) {
+        const posX = x * cellWidth;
+        const posY = y * cellHeight;
+        
+        ctx.beginPath();
+        ctx.arc(posX, posY, pointSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
-
-  ctx.restore();
+  
+  // Dessiner un point rouge plus visible au centre de la grille
+  const centerX = (cellCountX / 2) * cellWidth;
+  const centerY = (cellCountY / 2) * cellHeight;
+  
+  ctx.fillStyle = 'rgba(139, 92, 246, 1)';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+  ctx.fill();
 };
 
 function drawCanvas() {
@@ -368,11 +364,81 @@ function drawCanvas() {
         break;
       }
       case "text": {
+        // Calculer les dimensions de la grille
+        const cellCountX = 32; // Largeur en cellules
+        const cellCountY = 18; // Hauteur en cellules
+        const cellWidth = canvasDimensions.value.width / cellCountX;
+        const cellHeight = canvasDimensions.value.height / cellCountY;
+        
+        // Arrondir les coordonnées et dimensions pour s'aligner sur la grille
+        const gridX = Math.round((-element.width / 2) / cellWidth) * cellWidth;
+        const gridY = Math.round((-element.height / 2) / cellHeight) * cellHeight;
+        const gridWidth = Math.ceil(element.width / cellWidth) * cellWidth;
+        const gridHeight = Math.ceil(element.height / cellHeight) * cellHeight;
+        
+        // Dessiner le contour principal avec un effet d'ombre
+        ctx.save();
+        // Effet d'ombre
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        
+        // Contour extérieur
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+          gridX - 1,
+          gridY - 1,
+          gridWidth + 2,
+          gridHeight + 2
+        );
+        
+        // Fond semi-transparent
+        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+        ctx.fillRect(
+          gridX,
+          gridY,
+          gridWidth,
+          gridHeight
+        );
+        
+        // Lignes de grille intérieures (pointillés)
+        ctx.setLineDash([2, 2]);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.lineWidth = 1;
+        
+        // Lignes verticales
+        for (let x = 1; x < gridWidth / cellWidth; x++) {
+          ctx.beginPath();
+          ctx.moveTo(gridX + x * cellWidth, gridY);
+          ctx.lineTo(gridX + x * cellWidth, gridY + gridHeight);
+          ctx.stroke();
+        }
+        
+        // Lignes horizontales
+        for (let y = 1; y < gridHeight / cellHeight; y++) {
+          ctx.beginPath();
+          ctx.moveTo(gridX, gridY + y * cellHeight);
+          ctx.lineTo(gridX + gridWidth, gridY + y * cellHeight);
+          ctx.stroke();
+        }
+        
+        ctx.restore();
+        
+        // Dessiner le texte
+        ctx.save();
         ctx.fillStyle = element.data?.color || "white";
         ctx.font = `${element.data?.fontSize || 24}px Arial`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(element.data?.content || "", 0, 0, element.width);
+        ctx.fillText(
+          element.data?.content || "", 
+          gridX + gridWidth / 2, 
+          gridY + gridHeight / 2, 
+          gridWidth * 0.9 // Légère marge intérieure
+        );
+        ctx.restore();
         break;
       }
     }
@@ -438,25 +504,47 @@ function handleMouseMove(e: MouseEvent) {
   const dx = x - dragStartX.value;
   const dy = y - dragStartY.value;
 
-  // Mettre à jour la position de l'élément avec snap si activé
-  const snapSize = props.snapEnabled ? 10 : 1;
-  const newX = Math.max(
-    0,
-    Math.round((elementStartX.value + dx) / snapSize) * snapSize,
-  );
-  const newY = Math.max(
-    0,
-    Math.round((elementStartY.value + dy) / snapSize) * snapSize,
-  );
+  // Définir les dimensions de la grille (mêmes que pour le dessin)
+  const cellCountX = 32; // Largeur en cellules
+  const cellCountY = 18; // Hauteur en cellules
+  const cellWidth = canvasDimensions.value.width / cellCountX;
+  const cellHeight = canvasDimensions.value.height / cellCountY;
+
+  // Calculer la nouvelle position en fonction de la grille
+  let newX = elementStartX.value + dx;
+  let newY = elementStartY.value + dy;
+
+  // Si le snap est activé, aligner sur la grille
+  if (props.snapEnabled) {
+    // Pour le texte, on aligne le centre de l'élément sur la grille
+    if (draggedElement.value.type === 'text') {
+      const halfWidth = draggedElement.value.width / 2;
+      const halfHeight = draggedElement.value.height / 2;
+      
+      // Aligner le centre de l'élément sur la grille
+      const centerX = Math.round((newX + halfWidth) / cellWidth) * cellWidth;
+      const centerY = Math.round((newY + halfHeight) / cellHeight) * cellHeight;
+      
+      // Recalculer la position à partir du centre aligné
+      newX = centerX - halfWidth;
+      newY = centerY - halfHeight;
+    } else {
+      // Pour les autres éléments, aligner le coin supérieur gauche
+      newX = Math.round(newX / cellWidth) * cellWidth;
+      newY = Math.round(newY / cellHeight) * cellHeight;
+    }
+  }
+
+  // S'assurer que l'élément reste dans les limites du canvas
+  newX = Math.max(0, Math.min(newX, canvasDimensions.value.width - (draggedElement.value.width || 0)));
+  newY = Math.max(0, Math.min(newY, canvasDimensions.value.height - (draggedElement.value.height || 0)));
 
   // Émettre la mise à jour
-  if (draggedElement.value) {
-    emit("element-update", {
-      ...draggedElement.value,
-      x: newX,
-      y: newY,
-    });
-  }
+  emit("element-update", {
+    ...draggedElement.value,
+    x: newX,
+    y: newY,
+  });
 }
 
 function handleMouseUp() {

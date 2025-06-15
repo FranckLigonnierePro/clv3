@@ -39,33 +39,38 @@ const updateCanvasDimensions = () => {
   }
 };
 
-// Fonction utilitaire pour créer un nouvel élément texte centré
+// Fonction utilitaire pour créer un nouvel élément texte centré sur la grille 32x18
 const createTextElement = (): CanvasElement => {
-  // Calculer la position pour centrer le texte
   const gridCellSize = gridSize.value;
-  const textWidth = gridCellSize * 5; // Largeur de 5 cellules
-  const textHeight = gridCellSize; // Hauteur d'une cellule
-
+  const cellCountX = 32; // Largeur en cellules
+  const cellCountY = 18;  // Hauteur en cellules
+  
+  // Calculer la taille des cellules pour s'adapter au canvas
+  const cellWidth = canvasDimensions.value.width / cellCountX;
+  const cellHeight = canvasDimensions.value.height / cellCountY;
+  
+  // Positionner au centre de la grille (légèrement décalé vers le haut pour le texte)
+  const centerX = Math.round((cellCountX / 2) * cellWidth);
+  const centerY = Math.round((cellCountY / 2) * cellHeight);
+  
+  // Taille du texte (en cellules)
+  const textWidthCells = 8;  // Largeur de 8 cellules
+  const textHeightCells = 2;  // Hauteur de 2 cellules
+  
   return {
     id: `text-${Date.now()}`,
     type: "text",
-    x:
-      Math.round(
-        (canvasDimensions.value.width - textWidth) / 2 / gridCellSize,
-      ) * gridCellSize,
-    y:
-      Math.round(
-        (canvasDimensions.value.height - textHeight) / 2 / gridCellSize,
-      ) * gridCellSize,
-    width: textWidth,
-    height: textHeight,
+    x: centerX - (textWidthCells * cellWidth) / 2, // Centrer horizontalement
+    y: centerY - (textHeightCells * cellHeight) / 2, // Centrer verticalement
+    width: textWidthCells * cellWidth,
+    height: textHeightCells * cellHeight,
     rotation: 0,
     locked: false,
     visible: true,
     data: {
       content: "Nouveau texte",
       color: "#ffffff",
-      fontSize: gridCellSize * 0.6, // Taille de police proportionnelle à la grille
+      fontSize: cellHeight * 0.8, // Taille de police proportionnelle à la hauteur des cellules
       fontFamily: "Arial",
       textAlign: "center",
       bold: false,
@@ -104,7 +109,7 @@ const format = ref<"16:9" | "9:16">("16:9");
 // Contrôles de la grille
 const showGrid = ref(true);
 const gridSize = ref(40); // Taille de la grille en pixels
-const gridColor = ref("rgba(255, 255, 255, 0.1)"); // Couleur de la grille
+const gridColor = ref("rgba(139, 92, 246, 0.5)"); // Couleur de la grille
 // selectedElement est maintenant défini plus haut
 const snapEnabled = ref(true);
 
