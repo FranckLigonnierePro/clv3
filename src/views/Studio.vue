@@ -41,7 +41,6 @@ const updateCanvasDimensions = () => {
 
 // Fonction utilitaire pour créer un nouvel élément texte centré sur la grille 32x18
 const createTextElement = (): CanvasElement => {
-  const gridCellSize = gridSize.value;
   const cellCountX = 32; // Largeur en cellules
   const cellCountY = 18;  // Hauteur en cellules
   
@@ -54,8 +53,8 @@ const createTextElement = (): CanvasElement => {
   const centerY = Math.round((cellCountY / 2) * cellHeight);
   
   // Taille du texte (en cellules)
-  const textWidthCells = 8;  // Largeur de 8 cellules
-  const textHeightCells = 2;  // Hauteur de 2 cellules
+  const textWidthCells = 6;  // Largeur de 8 cellules
+  const textHeightCells = 1;  // Hauteur de 2 cellules
   
   return {
     id: `text-${Date.now()}`,
@@ -83,15 +82,23 @@ const createTextElement = (): CanvasElement => {
 // Références
 const canvasRef = ref<InstanceType<typeof Canvas> | null>(null);
 
+// État de sélection
+const selectedElementId = ref<string | null>(null);
+
 // Éléments du canvas (sera remplacé lors du changement de scène)
 const elements = ref<CanvasElement[]>([]);
 
-// Fonction pour mettre à jour un élément
+// Gérer la sélection d'un élément
+const handleElementSelect = (id: string | null) => {
+  selectedElementId.value = id;
+};
+
+// Mettre à jour un élément
 const updateElement = (updatedElement: CanvasElement) => {
   const index = elements.value.findIndex((el) => el.id === updatedElement.id);
   if (index !== -1) {
     const newElements = [...elements.value];
-    newElements[index] = updatedElement;
+    newElements[index] = { ...newElements[index], ...updatedElement };
     elements.value = newElements;
   }
 };
@@ -101,8 +108,12 @@ const handleElementUpdate = (element: CanvasElement) => {
   updateElement(element);
 };
 
+// Supprimer un élément
 const handleElementDelete = (id: string) => {
   elements.value = elements.value.filter((el) => el.id !== id);
+  if (selectedElementId.value === id) {
+    selectedElementId.value = null;
+  }
 };
 // Format du canvas (16:9 ou 9:16)
 const format = ref<"16:9" | "9:16">("16:9");
@@ -231,36 +242,95 @@ const addTextElement = () => {
   elements.value = [...elements.value, newElement];
 };
 
-const addImageElement = () => {
-  // TODO: Implement image upload
-  console.log("Add image element");
-};
-
-const addVideoElement = () => {
-  // TODO: Implement video upload
-  console.log("Add video element");
-};
-
-const addShapeElement = (shape: "rectangle" | "circle") => {
-  const newElement: CanvasElement = {
-    id: `${shape}-${Date.now()}`,
-    type: "shape",
-    x: 100,
-    y: 100,
-    width: 150,
-    height: 150,
+// Fonction utilitaire pour créer un nouvel élément image centré sur la grille 32x18
+const createImageElement = (imageUrl: string = ''): CanvasElement => {
+  const cellCountX = 32; // Largeur en cellules
+  const cellCountY = 18;  // Hauteur en cellules
+  
+  // Calculer la taille des cellules pour s'adapter au canvas
+  const cellWidth = canvasDimensions.value.width / cellCountX;
+  const cellHeight = canvasDimensions.value.height / cellCountY;
+  
+  // Positionner au centre de la grille
+  const centerX = Math.round((cellCountX / 2) * cellWidth);
+  const centerY = Math.round((cellCountY / 2) * cellHeight);
+  
+  // Taille de l'image (en cellules)
+  const imageWidthCells = 8;  // Largeur de 8 cellules
+  const imageHeightCells = 6;  // Hauteur de 6 cellules (ratio 4:3)
+  
+  return {
+    id: `image-${Date.now()}`,
+    type: "image",
+    x: centerX - (imageWidthCells * cellWidth) / 2, // Centrer horizontalement
+    y: centerY - (imageHeightCells * cellHeight) / 2, // Centrer verticalement
+    width: imageWidthCells * cellWidth,
+    height: imageHeightCells * cellHeight,
     rotation: 0,
     locked: false,
+    visible: true,
     data: {
-      shape,
-      fill: "#3b82f6",
-      stroke: "#1d4ed8",
-      strokeWidth: 2,
-      opacity: 1,
+      src: imageUrl,
+      // Valeurs par défaut pour la gestion de l'image
+      aspectRatio: 4/3, // Ratio largeur/hauteur (4:3 par défaut)
+      originalWidth: imageWidthCells * cellWidth,
+      originalHeight: imageHeightCells * cellHeight,
     },
   };
-  elements.value = [...elements.value, newElement];
 };
+
+const addImageElement = () => {
+  // Créer un input de type file
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  
+  // Gérer la sélection de fichier
+  input.onchange = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    
+    if (file) {
+      // Créer une URL pour l'image sélectionnée
+      const imageUrl = URL.createObjectURL(file);
+      
+      // Créer un élément image pour obtenir ses dimensions
+      const img = new Image();
+      img.onload = () => {
+        // Créer un nouvel élément image avec l'URL
+        const newElement = createImageElement(imageUrl);
+        
+        // Mettre à jour les dimensions pour conserver le ratio d'aspect
+        const aspectRatio = img.width / img.height;
+        newElement.data.aspectRatio = aspectRatio;
+        
+        // Ajuster la largeur ou la hauteur pour conserver le ratio
+        if (aspectRatio > 1) {
+          // Image plus large que haute
+          newElement.height = newElement.width / aspectRatio;
+        } else {
+          // Image plus haute que large ou carrée
+          newElement.width = newElement.height * aspectRatio;
+        }
+        
+        // Ajouter l'élément au canvas
+        elements.value = [...elements.value, newElement];
+        
+        // Libérer la mémoire de l'URL de l'objet quand elle n'est plus nécessaire
+        // (par exemple, quand l'élément est supprimé ou remplacé)
+        // Note: Dans une application réelle, vous voudrez peut-être gérer cela différemment
+        // pour les images qui sont réutilisées ou sauvegardées
+      };
+      
+      // Définir la source de l'image pour déclencher le chargement
+      img.src = imageUrl;
+    }
+  };
+  
+  // Déclencher la boîte de dialogue de sélection de fichier
+  input.click();
+};
+
 </script>
 
 <template>
@@ -272,8 +342,6 @@ const addShapeElement = (shape: "rectangle" | "circle") => {
       :show-grid="showGrid"
       @add-text="addTextElement"
       @add-image="addImageElement"
-      @add-video="addVideoElement"
-      @add-shape="addShapeElement"
       @toggle-grid="showGrid = !showGrid"
     />
 
@@ -305,7 +373,6 @@ const addShapeElement = (shape: "rectangle" | "circle") => {
 
         <!-- Canvas -->
         <div class="relative w-full" :style="{ width: format === '16:9' ? 'calc(100vh * 16/9 - 6rem)' : 'calc(100vh * 9/16 - 6rem)' }">
-          
           <Canvas
             ref="canvasRef"
             :elements="elements"
@@ -315,9 +382,11 @@ const addShapeElement = (shape: "rectangle" | "circle") => {
             :format="format"
             :snap-enabled="snapEnabled"
             :is-live="isLive"
+            :selected-element-id="selectedElementId"
             @element-update="handleElementUpdate"
             @element-delete="handleElementDelete"
-          />
+            @element-select="handleElementSelect"
+          /> 
         </div>
       </div>
     </div>
