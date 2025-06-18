@@ -93,6 +93,12 @@ const canvasDimensions = ref({
   height: 450, // 16:9 par défaut
 });
 
+// Stocker les dimensions d'origine pour le calcul des pourcentages
+const originalDimensions = {
+  width: 800,
+  height: 450
+};
+
 // Met à jour les dimensions du canvas en fonction du conteneur
 const updateCanvasSize = () => {
   const padding = 32;
@@ -109,13 +115,45 @@ const updateCanvasSize = () => {
     width = height * targetRatio;
   }
 
+  // Mettre à jour les dimensions d'origine si c'est le premier chargement
+  if (originalDimensions.width === 800 && originalDimensions.height === 450) {
+    originalDimensions.width = Math.floor(width);
+    originalDimensions.height = Math.floor(height);
+  }
+
   canvasDimensions.value = {
     width: Math.floor(width),
     height: Math.floor(height),
   };
 
+  // Mettre à jour les positions des éléments
+  updateElementsPosition();
+  
   updatePhysicalCanvas();
   requestAnimationFrame(drawCanvas);
+};
+
+// Met à jour les positions des éléments en fonction du redimensionnement
+const updateElementsPosition = () => {
+  if (!originalDimensions.width || !originalDimensions.height) return;
+  
+  const widthRatio = canvasDimensions.value.width / originalDimensions.width;
+  const heightRatio = canvasDimensions.value.height / originalDimensions.height;
+  
+  // Mettre à jour chaque élément
+  props.elements.forEach(element => {
+    element.x = (element.x / originalDimensions.width) * canvasDimensions.value.width;
+    element.y = (element.y / originalDimensions.height) * canvasDimensions.value.height;
+    element.width = (element.width / originalDimensions.width) * canvasDimensions.value.width;
+    element.height = (element.height / originalDimensions.height) * canvasDimensions.value.height;
+    
+    // Émettre la mise à jour
+    emit('element-update', {...element});
+  });
+  
+  // Mettre à jour les dimensions d'origine pour le prochain redimensionnement
+  originalDimensions.width = canvasDimensions.value.width;
+  originalDimensions.height = canvasDimensions.value.height;
 };
 
 // Met à jour le canvas physique avec la bonne résolution
@@ -649,8 +687,8 @@ function handleMouseMove(e: MouseEvent) {
   const y = e.clientY - rect.top;
   
   // Définir les dimensions de la grille (mêmes que pour le dessin)
-  const cellCountX = 32; // Largeur en cellules
-  const cellCountY = 18; // Hauteur en cellules
+  const cellCountX = 64; // Largeur en cellules
+  const cellCountY = 36; // Hauteur en cellules
   
   // Taille des cellules en pixels
   const cellWidth = canvasRef.value.width / cellCountX;
