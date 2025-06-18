@@ -460,83 +460,84 @@ function drawCanvas() {
         break;
       }
       case "text": {
-        // Calculer les dimensions de la grille
-        const cellCountX = 32; // Largeur en cellules
-        const cellCountY = 18; // Hauteur en cellules
-        const cellWidth = canvasDimensions.value.width / cellCountX;
-        const cellHeight = canvasDimensions.value.height / cellCountY;
-        
-        // Arrondir les coordonnées et dimensions pour s'aligner sur la grille
-        const gridX = Math.round((-element.width / 2) / cellWidth) * cellWidth;
-        const gridY = Math.round((-element.height / 2) / cellHeight) * cellHeight;
-        const gridWidth = Math.ceil(element.width / cellWidth) * cellWidth;
-        const gridHeight = Math.ceil(element.height / cellHeight) * cellHeight;
-        
-        // Dessiner le contour principal avec un effet d'ombre
-        ctx.save();
-        // Effet d'ombre
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
-        
-        // Contour extérieur
-        ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(
-          gridX - 1,
-          gridY - 1,
-          gridWidth + 2,
-          gridHeight + 1
-        );
-        
-        // Fond semi-transparent
-        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-        ctx.fillRect(
-          gridX,
-          gridY,
-          gridWidth,
-          gridHeight
-        );
-        
-        // Lignes de grille intérieures (pointillés)
-        ctx.setLineDash([2, 2]);
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
-        ctx.lineWidth = 1;
-        
-        // Lignes verticales
-        for (let x = 1; x < gridWidth / cellWidth; x++) {
-          ctx.beginPath();
-          ctx.moveTo(gridX + x * cellWidth, gridY);
-          ctx.lineTo(gridX + x * cellWidth, gridY + gridHeight);
-          ctx.stroke();
-        }
-        
-        // Lignes horizontales
-        for (let y = 1; y < gridHeight / cellHeight; y++) {
-          ctx.beginPath();
-          ctx.moveTo(gridX, gridY + y * cellHeight);
-          ctx.lineTo(gridX + gridWidth, gridY + y * cellHeight);
-          ctx.stroke();
-        }
-        
-        ctx.restore();
-        
-        // Dessiner le texte
-        ctx.save();
-        ctx.fillStyle = element.data?.color || "white";
-        ctx.font = `${element.data?.fontSize || 24}px Arial`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(
-          element.data?.content || "", 
-          gridX + gridWidth / 2, 
-          gridY + gridHeight / 2, 
-          gridWidth * 0.9 // Légère marge intérieure
-        );
-        ctx.restore();
-        break;
-      }
+      // Calculer les dimensions de la grille
+      const cellCountX = 32; // Largeur en cellules
+      const cellCountY = 18; // Hauteur en cellules
+      const cellWidth = canvasDimensions.value.width / cellCountX;
+      const cellHeight = canvasDimensions.value.height / cellCountY;
+
+      // Dimensions imposées à 6 colonnes par 2 lignes
+      const gridWidth = 6 * cellWidth;
+      const gridHeight = 2 * cellHeight;
+      const gridX = -gridWidth / 2;
+      const gridY = -gridHeight / 2;
+
+      // Mettre à jour la taille de l'élément
+      element.width = gridWidth;
+      element.height = gridHeight;
+
+      // Dessiner le contour principal avec un effet d'ombre
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        gridX - 1,
+        gridY - 1,
+        gridWidth + 2,
+        gridHeight + 2
+      );
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+  ctx.fillRect(
+    gridX,
+    gridY,
+    gridWidth,
+    gridHeight
+  );
+
+  // Grille intérieure (pointillés)
+  ctx.setLineDash([2, 2]);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+  ctx.lineWidth = 1;
+
+  // Lignes verticales (entre les 6 colonnes)
+  for (let x = 1; x < 6; x++) {
+    ctx.beginPath();
+    ctx.moveTo(gridX + x * cellWidth, gridY);
+    ctx.lineTo(gridX + x * cellWidth, gridY + gridHeight);
+    ctx.stroke();
+  }
+
+  // Lignes horizontales (entre les 2 lignes)
+  for (let y = 1; y < 2; y++) {
+    ctx.beginPath();
+    ctx.moveTo(gridX, gridY + y * cellHeight);
+    ctx.lineTo(gridX + gridWidth, gridY + y * cellHeight);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // Texte centré
+  ctx.save();
+  ctx.fillStyle = element.data?.color || "white";
+  ctx.font = `${element.data?.fontSize || 24}px Arial`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(
+    element.data?.content || "",
+    0, // centré avec translate
+    0,
+    gridWidth * 0.9 // légère marge intérieure
+  );
+  ctx.restore();
+  break;
+}
     }
     ctx.restore();
   });

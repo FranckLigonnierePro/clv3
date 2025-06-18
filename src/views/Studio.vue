@@ -41,37 +41,41 @@ const updateCanvasDimensions = () => {
 
 // Fonction utilitaire pour créer un nouvel élément texte centré sur la grille 32x18
 const createTextElement = (): CanvasElement => {
-  const cellCountX = 32; // Largeur en cellules
-  const cellCountY = 18;  // Hauteur en cellules
-  
-  // Calculer la taille des cellules pour s'adapter au canvas
+  const cellCountX = 32;
+  const cellCountY = 18;
+
   const cellWidth = canvasDimensions.value.width / cellCountX;
   const cellHeight = canvasDimensions.value.height / cellCountY;
-  
-  // Positionner au centre de la grille (légèrement décalé vers le haut pour le texte)
-  const centerX = Math.round((cellCountX / 2) * cellWidth);
-  const centerY = Math.round((cellCountY / 2) * cellHeight);
-  
-  // Taille du texte (en cellules)
-  const textWidthCells = 6;  // Largeur de 8 cellules
-  const textHeightCells = 1;  // Hauteur de 2 cellules
-  
+
+  const elementWidth = 6 * cellWidth;
+  const elementHeight = 2 * cellHeight;
+
+  // Trouver le centre *en cellule*, puis calculer la position exacte du coin haut gauche
+  const centerCellX = Math.floor(cellCountX / 2);
+  const centerCellY = Math.floor(cellCountY / 2);
+
+  const centerX = centerCellX * cellWidth;
+  const centerY = centerCellY * cellHeight;
+
+  const x = centerX - elementWidth / 2;
+  const y = centerY - elementHeight / 2;
+
   return {
     id: `text-${Date.now()}`,
-    type: "text",
-    x: centerX - (textWidthCells * cellWidth) / 2, // Centrer horizontalement
-    y: centerY - (textHeightCells * cellHeight) / 2, // Centrer verticalement
-    width: textWidthCells * cellWidth,
-    height: textHeightCells * cellHeight,
+    type: 'text',
+    x,
+    y,
+    width: elementWidth,
+    height: elementHeight,
     rotation: 0,
     locked: false,
     visible: true,
     data: {
-      content: "Nouveau texte",
-      color: "#ffffff",
-      fontSize: cellHeight * 0.8, // Taille de police proportionnelle à la hauteur des cellules
-      fontFamily: "Arial",
-      textAlign: "center",
+      content: 'New Text',
+      color: '#ffffff',
+      fontSize: 24,
+      fontFamily: 'Arial',
+      textAlign: 'center',
       bold: false,
       italic: false,
       underline: false,
