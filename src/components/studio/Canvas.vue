@@ -487,7 +487,7 @@ function drawCanvas() {
           gridX - 1,
           gridY - 1,
           gridWidth + 2,
-          gridHeight + 2
+          gridHeight + 1
         );
         
         // Fond semi-transparent
@@ -980,8 +980,8 @@ function handleTouchMove(e: TouchEvent) {
     // Si le snap est activé, aligner sur la grille
     if (props.snapEnabled) {
       // Calculer la taille des cellules si nécessaire
-      const gridCellWidth = canvasDimensions.value.width / 32; // 32 cellules de large
-      const gridCellHeight = canvasDimensions.value.height / 18; // 18 cellules de hauteur
+      const gridCellWidth = canvasDimensions.value.width / 64; // 32 cellules de large
+      const gridCellHeight = canvasDimensions.value.height / 36; // 18 cellules de hauteur
       
       // Pour le texte, on aligne le centre de l'élément sur la grille
       if (element.type === 'text') {
