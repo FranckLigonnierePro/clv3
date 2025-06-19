@@ -913,8 +913,9 @@ function handleMouseDown(e: MouseEvent) {
   if (editingText.value) return;
 
   const rect = canvasRef.value.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+  // Conversion coordonnées souris (affichage) -> base 1920x1080 (canvas physique)
+  const x = ((e.clientX - rect.left) / rect.width) * 1920;
+  const y = ((e.clientY - rect.top) / rect.height) * 1080;
 
   // Vérifier si on a cliqué sur un élément
   for (let i = props.elements.length - 1; i >= 0; i--) {
@@ -933,6 +934,10 @@ function handleMouseDown(e: MouseEvent) {
           dragStartY.value = y;
           elementStartX.value = el.x;
           elementStartY.value = el.y;
+          elementStartWidth.value = el.width;
+          elementStartHeight.value = el.height;
+          window.addEventListener('mousemove', handleMouseMove);
+          window.addEventListener('mouseup', handleMouseUp);
           return;
         }
       }
@@ -946,165 +951,93 @@ function handleMouseDown(e: MouseEvent) {
       dragStartY.value = y;
       elementStartX.value = el.x;
       elementStartY.value = el.y;
-      
-      // Émettre l'événement de sélection
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
       emit('element-select', el.id);
-      
-      // Si on fait un double-clic, on passe en mode édition pour le texte
       if (e.detail === 2 && el.type === 'text') {
         startTextEdit(el);
       }
-      
       break;
     }
   }
-  
+
   // Si on a cliqué en dehors de tout élément, on désélectionne
   if (!isDragging.value && !isResizing.value) {
     emit('element-select', null);
   }
 }
 
+
 function handleMouseMove(e: MouseEvent) {
-  if ((!isDragging.value && !isResizing.value) || !draggedElement.value || !canvasRef.value) return;
+  if (!isDragging.value && !isResizing.value) return;
+  if (!canvasRef.value || !draggedElement.value) return;
 
   const rect = canvasRef.value.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  
-  // Définir les dimensions de la grille sur la base 1920x1080
-  const cellCountX = 64; // Largeur en cellules
-  const cellCountY = 36; // Hauteur en cellules
+  // Conversion coordonnées souris (affichage) -> base 1920x1080 (canvas physique)
+  const x = ((e.clientX - rect.left) / rect.width) * 1920;
+  const y = ((e.clientY - rect.top) / rect.height) * 1080;
+
+  const dx = x - dragStartX.value;
+  const dy = y - dragStartY.value;
+  const element = { ...draggedElement.value };
+  const cellCountX = 64;
+  const cellCountY = 36;
   const cellWidth = 1920 / cellCountX;
   const cellHeight = 1080 / cellCountY;
-  
-  // Si on est en train de redimensionner
-  if (isResizing.value && resizeHandle.value) {
-    const element = { ...draggedElement.value };
-    const dx = x - dragStartX.value;
-    const dy = y - dragStartY.value;
-    
-    // Calculer les nouvelles dimensions en fonction de la poignée utilisée
+
+  if (isResizing.value) {
+    // Logique de redimensionnement
+    const aspectRatio = element.data?.aspectRatio || 1;
+    const deltaX = x - dragStartX.value;
     switch (resizeHandle.value) {
-      case 'nw': {
-        // Redimensionnement depuis le coin supérieur gauche
-        const newWidth = element.width - dx;
-        const newHeight = element.height - dy;
-        
-        // Vérifier la taille minimale (2 cellules)
-        if (newWidth >= cellWidth * 2) {
-          element.x = elementStartX.value + dx;
-          element.width = newWidth;
-        }
-        if (newHeight >= cellHeight * 2) {
-          element.y = elementStartY.value + dy;
-          element.height = newHeight;
-        }
+      case 'nw':
+        element.width = Math.max(minElementSize, elementStartWidth.value - deltaX);
+        element.height = element.width / aspectRatio;
+        element.x = elementStartX.value + (elementStartWidth.value - element.width);
+        element.y = elementStartY.value + (elementStartHeight.value - element.height);
         break;
-      }
-        
-      case 'ne': {
-        // Redimensionnement depuis le coin supérieur droit
-        const newWidth = element.width + dx;
-        const newHeight = element.height - dy;
-        
-        // Vérifier la taille minimale (2 cellules)
-        if (newWidth >= cellWidth * 2) {
-          element.width = newWidth;
-        }
-        if (newHeight >= cellHeight * 2) {
-          element.y = elementStartY.value + dy;
-          element.height = newHeight;
-        }
+      case 'ne':
+        element.width = Math.max(minElementSize, elementStartWidth.value + deltaX);
+        element.height = element.width / aspectRatio;
+        element.y = elementStartY.value + (elementStartHeight.value - element.height);
         break;
-      }
-        
-      case 'sw': {
-        // Redimensionnement depuis le coin inférieur gauche
-        const newWidth = element.width - dx;
-        const newHeight = element.height + dy;
-        
-        // Vérifier la taille minimale (2 cellules)
-        if (newWidth >= cellWidth * 2) {
-          element.x = elementStartX.value + dx;
-          element.width = newWidth;
-        }
-        if (newHeight >= cellHeight * 2) {
-          element.height = newHeight;
-        }
+      case 'sw':
+        element.width = Math.max(minElementSize, elementStartWidth.value - deltaX);
+        element.height = element.width / aspectRatio;
+        element.x = elementStartX.value + (elementStartWidth.value - element.width);
         break;
-      }
-        
-      case 'se': {
-        // Redimensionnement depuis le coin inférieur droit
-        const newWidth = element.width + dx;
-        const newHeight = element.height + dy;
-        
-        // Vérifier la taille minimale (2 cellules)
-        if (newWidth >= cellWidth * 2) {
-          element.width = newWidth;
-        }
-        if (newHeight >= cellHeight * 2) {
-          element.height = newHeight;
-        }
+      case 'se':
+        element.width = Math.max(minElementSize, elementStartWidth.value + deltaX);
+        element.height = element.width / aspectRatio;
         break;
-      }
     }
-    
-    // Mettre à jour l'élément
-    emit('element-update', element);
-    return;
-  }
-  
-  // Si on est en train de déplacer
-  if (isDragging.value) {
-    // Calculer le déplacement
-    const dx = x - dragStartX.value;
-    const dy = y - dragStartY.value;
-    
-    // Créer une copie de l'élément déplacé
-    const element = { ...draggedElement.value };
-    
-    // Calculer la nouvelle position en fonction de la grille
+  } else {
+    // Logique de déplacement
     let newX = elementStartX.value + dx;
     let newY = elementStartY.value + dy;
-
-    // Si le snap est activé, aligner sur la grille
     if (props.snapEnabled) {
-      // Pour le texte, on aligne le centre de l'élément sur la grille
       if (element.type === 'text') {
         const halfWidth = element.width / 2;
         const halfHeight = element.height / 2;
-        
-        // Aligner le centre de l'élément sur la grille
         const centerX = Math.round((newX + halfWidth) / cellWidth) * cellWidth;
         const centerY = Math.round((newY + halfHeight) / cellHeight) * cellHeight;
-        
-        // Mettre à jour la position de l'élément
         element.x = centerX - halfWidth;
         element.y = centerY - halfHeight;
       } else {
-        // Pour les autres éléments, aligner le coin supérieur gauche sur la grille
         element.x = Math.round(newX / cellWidth) * cellWidth;
         element.y = Math.round(newY / cellHeight) * cellHeight;
       }
     } else {
-      // Si le snap est désactivé, utiliser la position exacte
       element.x = newX;
       element.y = newY;
     }
-    
     // S'assurer que l'élément reste dans les limites du canvas physique 1920x1080
     const boundedX = Math.max(0, Math.min(element.x, 1920 - (element.width || 0)));
     const boundedY = Math.max(0, Math.min(element.y, 1080 - (element.height || 0)));
-
-    // Mettre à jour la position de l'élément
     element.x = boundedX;
     element.y = boundedY;
-    
-    // Mettre à jour l'élément
-    emit('element-update', element);
   }
+  emit('element-update', element);
 }
 
 function handleMouseUp() {
@@ -1113,111 +1046,33 @@ function handleMouseUp() {
     isResizing.value = false;
     resizeHandle.value = '';
     draggedElement.value = null;
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
   }
 }
 
-// Sauvegarder les modifications du texte
-function saveTextEdit() {
-  if (!editingText.value) return;
 
-  const element = props.elements.find(
-    (el) => el.id === editingText.value?.elementId,
-  );
-  if (!element) return;
-
-  const updatedElement = {
-    ...element,
-    data: {
-      ...element.data,
-      content: editingText.value.content,
-      color: editingText.value.color,
-      fontSize: editingText.value.fontSize,
-    },
-  };
-
-  emit("element-update", updatedElement);
-
-  // Si le contenu est vide, on supprime l'élément
-  if (!editingText.value.content.trim()) {
-    emit("element-delete", editingText.value.elementId);
-  }
-
-  editingText.value = null;
-}
-
-// Supprimer un élément
-const handleDeleteElement = (elementId: string) => {
-  emit("element-delete", elementId);
-};
-
-// Annuler l'édition
-const cancelTextEdit = () => {
-  editingText.value = null;
-};
-
-// Gestion des événements tactiles
 function handleTouchStart(e: TouchEvent) {
-  e.preventDefault();
-  if (!canvasRef.value || editingText.value) return;
-  
-  const touch = e.touches[0];
-  const rect = canvasRef.value.getBoundingClientRect();
-  const x = touch.clientX - rect.left;
-  const y = touch.clientY - rect.top;
-  
-  // Vérifier si on a touché un élément
-  for (let i = props.elements.length - 1; i >= 0; i--) {
-    const el = props.elements[i];
-    if (el.locked) continue;
-    
-    // Vérifier si on a touché une poignée de redimensionnement
-    if (props.selectedElementId === el.id) {
-      const handles: Array<'nw' | 'ne' | 'sw' | 'se'> = ['nw', 'ne', 'sw', 'se'];
-      for (const handle of handles) {
-        if (isInResizeHandle(el, x, y, handle)) {
-          isResizing.value = true;
-          resizeHandle.value = handle;
-          draggedElement.value = { ...el };
-          dragStartX.value = x;
-          dragStartY.value = y;
-          elementStartX.value = el.x;
-          elementStartY.value = el.y;
-          return;
-        }
-      }
-    }
-    
-    // Vérifier si on a touché l'élément lui-même
-    if (x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height) {
-      isDragging.value = true;
-      draggedElement.value = { ...el };
-      dragStartX.value = x;
-      dragStartY.value = y;
-      elementStartX.value = el.x;
-      elementStartY.value = el.y;
-      
-      // Émettre l'événement de sélection
-      emit('element-select', el.id);
-      
-      // Si on fait un double-tap, on passe en mode édition pour le texte
-      if (el.type === 'text') {
-        startTextEdit(el);
-      }
-      
-      return;
-    }
+  // ...
+  if (isDragging.value || isResizing.value) {
+    window.addEventListener('touchend', handleTouchEnd);
   }
-  
-  // Éviter le défilement de la page
-  e.preventDefault();
+  // ...
 }
 
-function handleTouchMove(e: TouchEvent) {
+function handleTouchEnd(e: TouchEvent) {
   e.preventDefault();
-  
-  if (!isDragging.value && !isResizing.value) return;
-  if (!draggedElement.value || !canvasRef.value) return;
-  
+  if (isDragging.value || isResizing.value) {
+    isDragging.value = false;
+    isResizing.value = false;
+    resizeHandle.value = '';
+    // Retire l'écouteur touchend global
+    window.removeEventListener('touchend', handleTouchEnd);
+    // Réinitialiser les références de redimensionnement
+    if (draggedElement.value) {
+      // Mettre à jour l'élément final si nécessaire
+      emit('element-update', draggedElement.value);
+      draggedElement.value = null;
   const touch = e.touches[0];
   const rect = canvasRef.value.getBoundingClientRect();
   const x = touch.clientX - rect.left;
@@ -1301,7 +1156,7 @@ function handleTouchMove(e: TouchEvent) {
   // Émettre la mise à jour
   emit('element-update', element);
   e.preventDefault();
-}
+}}};
 
 // ...
 

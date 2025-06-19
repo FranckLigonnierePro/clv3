@@ -109,6 +109,49 @@ const createTextElement = (): CanvasElement => {
 // Références
 const canvasRef = ref<InstanceType<typeof Canvas> | null>(null);
 
+// --- Enregistrement du canvas ---
+const isRecording = ref(false);
+let mediaRecorder: MediaRecorder | null = null;
+let recordedChunks: Blob[] = [];
+
+function toggleRecording() {
+  if (isRecording.value) {
+    // Stop recording
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    isRecording.value = false;
+    return;
+  }
+  // Start recording
+  const canvas = canvasRef.value?.getCanvas?.();
+  if (!canvas) {
+    alert('Canvas introuvable pour l\'enregistrement.');
+    return;
+  }
+  const stream = (canvas as HTMLCanvasElement).captureStream(30);
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `enregistrement-canvas-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  };
+  mediaRecorder.start();
+  isRecording.value = true;
+}
+
 // État pour la sélection de la caméra
 const videoDevices = ref<MediaDeviceInfo[]>([]);
 const showCameraSelector = ref(false);
@@ -282,7 +325,7 @@ const snapEnabled = ref(true);
 
 // États des contrôles
 const isLive = ref(false);
-const isRecording = ref(false);
+// const isRecording = ref(false); // Supprimé car déjà déclaré plus haut pour l'enregistrement du canvas
 const isMicrophoneOn = ref(true);
 const isCameraOn = ref(true);
 
@@ -1052,10 +1095,10 @@ const createImageElement = (imageUrl: string = ''): CanvasElement => {
       @toggle-microphone="toggleMicrophone"
       @toggle-camera="toggleCamera"
       @toggle-live="toggleLive"
-      @toggle-recording="toggleRecording"
       @toggle-chat="toggleChat"
       @change-scene="changeScene"
       @save-project="saveProject"
+      @toggle-recording="toggleRecording"
     />
   </div>
 </template>
