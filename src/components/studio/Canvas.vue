@@ -7,6 +7,7 @@ import {
   onBeforeUnmount,
   nextTick,
 } from "vue";
+import * as PIXI from "pixi.js";
 
 export type CanvasElementType =
   | "camera"
@@ -72,8 +73,22 @@ const emit = defineEmits<{
 // Référence au conteneur parent
 const containerRef = ref<HTMLElement | null>(null);
 
-// Réf du canvas HTML réel
+// Réf du canvas HTML réel (sera remplacé par PixiJS)
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+
+// PixiJS
+let pixiApp: PIXI.Application | null = null;
+let pixiCanvas: HTMLCanvasElement | null = null;
+// Map id → displayObject Pixi
+const pixiObjects = new Map<string, PIXI.DisplayObject>();
+// Pour le drag/resize
+let dragData: {
+  id: string;
+  offsetX: number;
+  offsetY: number;
+  mode: 'drag' | 'resize-nw' | 'resize-ne' | 'resize-sw' | 'resize-se';
+} | null = null;
+
 
 // Stockage des balises vidéo hors DOM pour caméra & screen share
 const cameraVideos = ref<Record<string, HTMLVideoElement>>({});
@@ -89,7 +104,7 @@ const elementStartY = ref(0);
 
 // Dimensions du canvas
 const canvasDimensions = ref({
-  width: 800, // Valeur par défaut
+  width: 800, // Valeur par défaut pour l'AFFICHAGE (CSS)
   height: 450, // 16:9 par défaut
 });
 
@@ -168,20 +183,12 @@ const updatePhysicalCanvas = () => {
   const physicalWidth = Math.floor(width * dpr);
   const physicalHeight = Math.floor(height * dpr);
 
-  // Mise à jour des dimensions physiques
-  canvas.width = physicalWidth;
-  canvas.height = physicalHeight;
+  // NE TOUCHE PAS à la taille physique du canvas PixiJS (fixée à 1920x1080)
+  // On ne modifie que le CSS pour l'affichage responsive
+  canvas.style.width = `${canvasDimensions.value.width}px`;
+  canvas.style.height = `${canvasDimensions.value.height}px`;
 
-  // Mise à jour des dimensions logiques (CSS)
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-
-  // Mise à jour du contexte
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.scale(dpr, dpr);
-    ctx.imageSmoothingEnabled = true;
-  }
+  // Pas besoin de rescaler le contexte ici, Pixi gère son propre rendu
 };
 
 // Initialise les balises vidéo pour chaque stream unique (camera/screen)
@@ -236,22 +243,284 @@ onUnmounted(() => cleanupVideoElements([]));
 // Ne pas surveiller canvasDimensions pour éviter les boucles
 // car updateCanvasSize() met à jour canvasDimensions
 
-onMounted(() => {
-  // Mettre à jour la taille initiale
-  updateCanvasSize();
+let renderInterval: number | null = null;
 
-  if (containerRef.value) {
-    const observer = new ResizeObserver(() => {
-      requestAnimationFrame(updateCanvasSize);
-    });
-    observer.observe(containerRef.value);
-    onBeforeUnmount(() => observer.disconnect());
+onMounted(() => {
+  // Crée l'application PixiJS
+  // Canvas physique TOUJOURS en 1920x1080 pour la capture
+  pixiApp = new PIXI.Application({
+    width: 1920,
+    height: 1080,
+    backgroundColor: 0x1a1a1a,
+    antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+  });
+  pixiCanvas = pixiApp.view as HTMLCanvasElement;
+  // Ajout debug : expose l'instance PixiJS sur le canvas pour Studio.vue
+  (pixiCanvas as any).__pixiApp = pixiApp;
+  canvasRef.value = pixiCanvas;
+
+  // Ajoute le canvas Pixi dans le container
+  if (containerRef.value && pixiCanvas) {
+    containerRef.value.innerHTML = "";
+    containerRef.value.appendChild(pixiCanvas);
+    // Arrondi visuel du canvas
+    pixiCanvas.style.borderRadius = "20px";
+    pixiCanvas.style.overflow = "hidden";
   }
 
-  window.addEventListener("resize", updateCanvasSize);
+  // Synchronise la scène Pixi avec les éléments Vue
+  function syncPixiScene() {
+    if (!pixiApp) return;
+    pixiApp.stage.removeChildren();
+    pixiObjects.clear();
+    // --- Grille de fond ---
+    if (props.showGrid) {
+      const grid = new PIXI.Graphics();
+      const w = canvasDimensions.value.width;
+      const h = canvasDimensions.value.height;
+      const gridColor = PIXI.utils.string2hex(props.gridColor || "#8b5cf680");
+      // 32 colonnes, 18 lignes
+      const cols = 32;
+      const rows = 18;
+      const cellW = w / cols;
+      const cellH = h / rows;
+      // Points grille
+      for (let i = 1; i < cols; i++) { // pas 0 ni cols
+        for (let j = 1; j < rows; j++) { // pas 0 ni rows
+          const x = i * cellW;
+          const y = j * cellH;
+          // Point central
+          if (i === Math.floor(cols / 2) && j === Math.floor(rows / 2)) {
+            grid.beginFill(gridColor, 1);
+            grid.drawCircle(x, y, 5);
+            grid.endFill();
+          } else {
+            grid.beginFill(gridColor, 0.7);
+            grid.drawCircle(x, y, 2);
+            grid.endFill();
+          }
+        }
+      }
+      grid.zIndex = -1000;
+      pixiApp.stage.addChild(grid);
+    }
+    // --- Fin grille ---
+    props.elements.forEach(element => {
+      let obj: PIXI.DisplayObject | null = null;
+      let handles: PIXI.Graphics[] = [];
+      switch (element.type) {
+        case "image":
+          if (element.data?.src) {
+            obj = PIXI.Sprite.from(element.data.src);
+            obj.x = element.x;
+            obj.y = element.y;
+            (obj as PIXI.Sprite).width = element.width;
+            (obj as PIXI.Sprite).height = element.height;
+          }
+          break;
+        case "text":
+          if (element.data?.content) {
+            obj = new PIXI.Text(element.data.content, {
+              fontSize: element.data.fontSize || 24,
+              fill: element.data.color || "#ffffff",
+              fontFamily: element.data.fontFamily || "Arial",
+              align: element.data.textAlign || "center",
+            });
+            obj.x = element.x;
+            obj.y = element.y;
+          }
+          break;
+        case "shape":
+          if (element.data?.shape) {
+            const g = new PIXI.Graphics();
+            g.beginFill(PIXI.utils.string2hex(element.data.color || "#ffffff"));
+            if (element.data.shape === "rectangle") {
+              g.drawRect(0, 0, element.width, element.height);
+            } else if (element.data.shape === "circle") {
+              g.drawCircle(element.width / 2, element.height / 2, Math.min(element.width, element.height) / 2);
+            }
+            g.endFill();
+            g.x = element.x;
+            g.y = element.y;
+            obj = g;
+          }
+          break;
+        case "camera":
+        case "screen":
+        case "video":
+          if (element.data?.stream) {
+            // Pour simplifier, on ne gère que la première track vidéo
+            const video = document.createElement("video");
+            video.srcObject = element.data.stream;
+            video.muted = true;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.width = element.width;
+            video.height = element.height;
+            const tex = PIXI.Texture.from(video);
+            const sprite = new PIXI.Sprite(tex);
+            sprite.x = element.x;
+            sprite.y = element.y;
+            sprite.width = element.width;
+            sprite.height = element.height;
+            obj = sprite;
+          }
+          break;
+      }
+      if (obj) {
+        // Ajoute l’interactivité Pixi
+        obj.eventMode = 'static';
+        obj.cursor = 'pointer';
+        // Double-clic pour éditer le texte
+        if (element.type === 'text') {
+          obj.on('pointertap', (event: PIXI.FederatedPointerEvent) => {
+            if (event.detail === 2) {
+              startTextEdit(element);
+            }
+          });
+        }
+        obj.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
+          // Calcul du mode (drag ou resize)
+          const local = event.getLocalPosition(obj.parent);
+          let mode: 'drag' | 'resize-nw' | 'resize-ne' | 'resize-sw' | 'resize-se' = 'drag';
+          // 12px carré pour resize
+          const hs = 12;
+          if (
+            local.x >= element.x - hs && local.x <= element.x + hs &&
+            local.y >= element.y - hs && local.y <= element.y + hs
+          ) mode = 'resize-nw';
+          else if (
+            local.x >= element.x + element.width - hs && local.x <= element.x + element.width + hs &&
+            local.y >= element.y - hs && local.y <= element.y + hs
+          ) mode = 'resize-ne';
+          else if (
+            local.x >= element.x - hs && local.x <= element.x + hs &&
+            local.y >= element.y + element.height - hs && local.y <= element.y + element.height + hs
+          ) mode = 'resize-sw';
+          else if (
+            local.x >= element.x + element.width - hs && local.x <= element.x + element.width + hs &&
+            local.y >= element.y + element.height - hs && local.y <= element.y + element.height + hs
+          ) mode = 'resize-se';
+          dragData = {
+            id: element.id,
+            offsetX: local.x - element.x,
+            offsetY: local.y - element.y,
+            mode,
+          };
+          emit('element-select', element.id);
+        });
+        obj.on('pointerup', () => { dragData = null; });
+        obj.on('pointerupoutside', () => { dragData = null; });
+        obj.on('pointermove', (event: PIXI.FederatedPointerEvent) => {
+          if (!dragData || dragData.id !== element.id) return;
+          const local = event.getLocalPosition(obj.parent);
+          let newX = element.x, newY = element.y, newW = element.width, newH = element.height;
+          if (dragData.mode === 'drag') {
+            newX = local.x - dragData.offsetX;
+            newY = local.y - dragData.offsetY;
+          } else {
+            // Resize selon la poignée
+            if (dragData.mode === 'resize-nw') {
+              newW = element.width + (element.x - local.x);
+              newH = element.height + (element.y - local.y);
+              newX = local.x;
+              newY = local.y;
+            } else if (dragData.mode === 'resize-ne') {
+              newW = local.x - element.x;
+              newH = element.height + (element.y - local.y);
+              newY = local.y;
+            } else if (dragData.mode === 'resize-sw') {
+              newW = element.width + (element.x - local.x);
+              newX = local.x;
+              newH = local.y - element.y;
+            } else if (dragData.mode === 'resize-se') {
+              newW = local.x - element.x;
+              newH = local.y - element.y;
+            }
+            newW = Math.max(newW, 20);
+            newH = Math.max(newH, 20);
+          }
+          // Mets à jour le modèle Vue (et donc la scène)
+          emit('element-update', { ...element, x: newX, y: newY, width: newW, height: newH });
+        });
+        pixiApp.stage.addChild(obj);
+        pixiObjects.set(element.id, obj);
+        // Affiche les poignées si sélectionné
+        if (props.selectedElementId === element.id) {
+          const handleSize = 12;
+          const handleColor = 0x3b82f6;
+          const handleStroke = 0xffffff;
+          const corners = [
+            [element.x, element.y],
+            [element.x + element.width, element.y],
+            [element.x + element.width, element.y + element.height],
+            [element.x, element.y + element.height],
+          ];
+          for (const [hx, hy] of corners) {
+            const g = new PIXI.Graphics();
+            g.lineStyle(2, handleStroke);
+            g.beginFill(handleColor);
+            g.drawRect(-handleSize/2, -handleSize/2, handleSize, handleSize);
+            g.endFill();
+            g.x = hx;
+            g.y = hy;
+            g.zIndex = 1000;
+            pixiApp.stage.addChild(g);
+            handles.push(g);
+          }
+        }
+      }
+    });
+  }
 
-  // Démarrer la boucle de rendu
-  drawCanvas();
+  // Sync initial et sur changement d’éléments
+  syncPixiScene();
+  watch(() => props.elements, (newElements, oldElements) => {
+    // Détecte ajout d’un nouvel élément
+    if (props.snapEnabled && oldElements && newElements.length > oldElements.length) {
+      const added = newElements.find(e => !oldElements.some(o => o.id === e.id));
+      if (added) {
+        // Snap la position à la grille
+        const w = canvasDimensions.value.width;
+        const h = canvasDimensions.value.height;
+        const cols = 32;
+        const rows = 18;
+        const cellW = w / cols;
+        const cellH = h / rows;
+        const snappedX = Math.round(added.x / cellW) * cellW;
+        const snappedY = Math.round(added.y / cellH) * cellH;
+        if (snappedX !== added.x || snappedY !== added.y) {
+          emit('element-update', { ...added, x: snappedX, y: snappedY });
+        }
+      }
+    }
+    syncPixiScene();
+  }, { deep: true });
+  // Réagit à l'affichage de la grille et à l'aimantation
+  watch(() => props.showGrid, syncPixiScene);
+  watch(() => props.snapEnabled, () => {/* rien à faire ici côté rendu, mais permet de forcer le drag snap */});
+
+  // Resize PixiJS sur resize
+  function handleResize() {
+    updateCanvasSize(); // met à jour canvasDimensions (et donc la taille du Pixi renderer)
+    if (!pixiApp) return;
+    pixiApp.renderer.resize(canvasDimensions.value.width, canvasDimensions.value.height);
+    syncPixiScene();
+  }
+  window.addEventListener("resize", handleResize);
+
+  onBeforeUnmount(() => {
+    window.removeEventListener("resize", handleResize);
+    if (pixiApp) {
+      pixiApp.destroy(true, { children: true });
+      pixiApp = null;
+      pixiCanvas = null;
+    }
+    pixiObjects.clear();
+    dragData = null;
+  });
 });
 
 onBeforeUnmount(() => {
@@ -557,7 +826,8 @@ function drawCanvas() {
     ctx.restore();
   });
 
-  animationFrame = requestAnimationFrame(drawCanvas);
+  // Désormais, la boucle de rendu est assurée par setInterval (30 fps) partout
+// animationFrame = requestAnimationFrame(drawCanvas);
 }
 
 // État pour l'édition de texte
@@ -702,13 +972,11 @@ function handleMouseMove(e: MouseEvent) {
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   
-  // Définir les dimensions de la grille (mêmes que pour le dessin)
+  // Définir les dimensions de la grille sur la base 1920x1080
   const cellCountX = 64; // Largeur en cellules
   const cellCountY = 36; // Hauteur en cellules
-  
-  // Taille des cellules en pixels
-  const cellWidth = canvasRef.value.width / cellCountX;
-  const cellHeight = canvasRef.value.height / cellCountY;
+  const cellWidth = 1920 / cellCountX;
+  const cellHeight = 1080 / cellCountY;
   
   // Si on est en train de redimensionner
   if (isResizing.value && resizeHandle.value) {
@@ -826,9 +1094,9 @@ function handleMouseMove(e: MouseEvent) {
       element.y = newY;
     }
     
-    // S'assurer que l'élément reste dans les limites du canvas
-    const boundedX = Math.max(0, Math.min(element.x, canvasDimensions.value.width - (element.width || 0)));
-    const boundedY = Math.max(0, Math.min(element.y, canvasDimensions.value.height - (element.height || 0)));
+    // S'assurer que l'élément reste dans les limites du canvas physique 1920x1080
+    const boundedX = Math.max(0, Math.min(element.x, 1920 - (element.width || 0)));
+    const boundedY = Math.max(0, Math.min(element.y, 1080 - (element.height || 0)));
 
     // Mettre à jour la position de l'élément
     element.x = boundedX;
@@ -955,17 +1223,29 @@ function handleTouchMove(e: TouchEvent) {
   const x = touch.clientX - rect.left;
   const y = touch.clientY - rect.top;
   
-  const dx = x - dragStartX.value;
-  const dy = y - dragStartY.value;
+  // Convertir les coordonnées touch en base 1920x1080
+  const canvasWidth = canvasDimensions.value.width;
+  const canvasHeight = canvasDimensions.value.height;
+  const xInCanvas = (x / canvasWidth) * 1920;
+  const yInCanvas = (y / canvasHeight) * 1080;
   
+  const dx = xInCanvas - dragStartX.value;
+  const dy = yInCanvas - dragStartY.value;
+
   // Créer une copie de l'élément déplacé
   const element = { ...draggedElement.value };
-  
+
+  // Définir les dimensions de la grille sur la base 1920x1080
+  const cellCountX = 64;
+  const cellCountY = 36;
+  const cellWidth = 1920 / cellCountX;
+  const cellHeight = 1080 / cellCountY;
+
   if (isResizing.value) {
     // Logique de redimensionnement
     const aspectRatio = element.data?.aspectRatio || 1;
-    const deltaX = x - dragStartX.value;
-    
+    const deltaX = xInCanvas - dragStartX.value;
+
     switch (resizeHandle.value) {
       case 'nw':
         element.width = Math.max(minElementSize, elementStartWidth.value - deltaX);
@@ -992,72 +1272,38 @@ function handleTouchMove(e: TouchEvent) {
     // Logique de déplacement
     let newX = elementStartX.value + dx;
     let newY = elementStartY.value + dy;
-    
+
     // Si le snap est activé, aligner sur la grille
     if (props.snapEnabled) {
-      // Calculer la taille des cellules si nécessaire
-      const gridCellWidth = canvasDimensions.value.width / 64; // 32 cellules de large
-      const gridCellHeight = canvasDimensions.value.height / 36; // 18 cellules de hauteur
-      
-      // Pour le texte, on aligne le centre de l'élément sur la grille
       if (element.type === 'text') {
         const halfWidth = element.width / 2;
         const halfHeight = element.height / 2;
-        
-        // Aligner le centre de l'élément sur la grille
-        const centerX = Math.round((newX + halfWidth) / gridCellWidth) * gridCellWidth;
-        const centerY = Math.round((newY + halfHeight) / gridCellHeight) * gridCellHeight;
-        
-        // Mettre à jour la position de l'élément
+        const centerX = Math.round((newX + halfWidth) / cellWidth) * cellWidth;
+        const centerY = Math.round((newY + halfHeight) / cellHeight) * cellHeight;
         element.x = centerX - halfWidth;
         element.y = centerY - halfHeight;
       } else {
-        // Pour les autres éléments, aligner le coin supérieur gauche sur la grille
-        element.x = Math.round(newX / gridCellWidth) * gridCellWidth;
-        element.y = Math.round(newY / gridCellHeight) * gridCellHeight;
+        element.x = Math.round(newX / cellWidth) * cellWidth;
+        element.y = Math.round(newY / cellHeight) * cellHeight;
       }
     } else {
-      // Si le snap est désactivé, utiliser la position exacte
       element.x = newX;
       element.y = newY;
     }
+
+    // S'assurer que l'élément reste dans les limites du canvas physique 1920x1080
+    const boundedX = Math.max(0, Math.min(element.x, 1920 - (element.width || 0)));
+    const boundedY = Math.max(0, Math.min(element.y, 1080 - (element.height || 0)));
+    element.x = boundedX;
+    element.y = boundedY;
   }
-  
-  // S'assurer que l'élément reste dans les limites du canvas
-  const boundedX = Math.max(0, Math.min(element.x, canvasDimensions.value.width - (element.width || 0)));
-  const boundedY = Math.max(0, Math.min(element.y, canvasDimensions.value.height - (element.height || 0)));
-  
-  // Mettre à jour la position de l'élément
-  element.x = boundedX;
-  element.y = boundedY;
-  
-  // Mettre à jour l'élément
-  emit('element-update', element);
 
   // Émettre la mise à jour
-  emit("element-update", draggedElement.value);
+  emit('element-update', element);
   e.preventDefault();
 }
 
-function handleTouchEnd(e: TouchEvent) {
-  e.preventDefault();
-  
-  if (isDragging.value || isResizing.value) {
-    isDragging.value = false;
-    isResizing.value = false;
-    resizeHandle.value = '';
-    
-    // Réinitialiser les références de redimensionnement
-    if (draggedElement.value) {
-      // Mettre à jour l'élément final si nécessaire
-      emit('element-update', draggedElement.value);
-      draggedElement.value = null;
-    }
-  } else {
-    // Si on ne déplaçait pas et ne redimensionnait pas, on désélectionne
-    emit('element-select', null);
-  }
-}
+// ...
 
 
 
@@ -1065,8 +1311,10 @@ function handleTouchEnd(e: TouchEvent) {
 
 // Expose la méthode getCanvas (pour .captureStream())
 defineExpose({
-  getCanvas: () => canvasRef.value,
+  getCanvas: () => pixiCanvas,
 });
+
+
 </script>
 
 <template>
@@ -1081,17 +1329,10 @@ defineExpose({
       :style="{
         width: `${canvasDimensions.width}px`,
         height: `${canvasDimensions.height}px`,
-        cursor: isDragging ? 'grabbing' : 'default',
+        cursor: 'default',
         touchAction: 'none',
       }"
-      @mousedown="handleMouseDown"
-      @mousemove="handleMouseMove"
-      @mouseup="handleMouseUp"
-      @mouseleave="handleMouseUp"
-      @touchstart="handleTouchStart"
-      @touchmove="handleTouchMove"
-      @touchend="handleTouchEnd"
-      @touchcancel="handleTouchEnd"
+      style="pointer-events: none;"
     ></canvas>
 
     <!-- Éditeur de texte -->

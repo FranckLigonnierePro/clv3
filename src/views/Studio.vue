@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
+import { io, Socket } from "socket.io-client";
 import { Room, createLocalVideoTrack, LocalVideoTrack } from "livekit-client"; // LiveKit pour le streaming
 import Canvas from "../components/studio/Canvas.vue";
 import LeftPanel from "../components/studio/LeftPanel.vue";
@@ -291,13 +292,14 @@ const roomLivekit = ref<Room | null>(null);
 // Démarrer le stream LiveKit (publie le flux vidéo du canvas)
 async function startLivekitStream(roomId: string) {
   // Récupérer le token pour la salle LiveKit
-  const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/livekit-token`, {
+  const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       roomName: roomId,
+      participantName: "host"
     }),
   });
 
@@ -309,25 +311,88 @@ async function startLivekitStream(roomId: string) {
   const token = data.token;
 
   // Créer une nouvelle connexion LiveKit
-  const livekit = new Room({
-    url: 'ws://localhost:7880', // à adapter si besoin
-    token,
-  });
-
-  // Se connecter à la salle LiveKit
-  await livekit.connect();
+  const livekit = new Room();
+  const livekitUrl = import.meta.env.VITE_LIVEKIT_URL || 'wss://clipstudio-vdf7emf1.livekit.cloud';
+  await livekit.connect(livekitUrl, token);
 
   // Publier le flux vidéo du canvas
   if (!canvasRef.value || typeof canvasRef.value.getCanvas !== 'function') {
     console.error('canvasRef ou getCanvas non disponible');
     return;
   }
-  const canvasElement = canvasRef.value.getCanvas();
-  if (!canvasElement) {
-    console.error('Impossible de récupérer l’élément <canvas>');
+  // Attente automatique que le canvas PixiJS soit prêt et visible
+  let canvasElement = canvasRef.value.getCanvas();
+  let tries = 0;
+  while ((!(canvasElement instanceof HTMLCanvasElement) || canvasElement.width === 0 || canvasElement.height === 0) && tries < 20) {
+    await new Promise(res => setTimeout(res, 100));
+    canvasElement = canvasRef.value.getCanvas();
+    tries++;
+  }
+  if (!(canvasElement instanceof HTMLCanvasElement)) {
+    console.error('canvasRef.getCanvas() ne retourne pas un <canvas> HTML valide', canvasElement);
+    alert('Erreur : le flux vidéo ne peut pas être publié car le canvas PixiJS n’est pas prêt.');
     return;
   }
+  if (canvasElement.width === 0 || canvasElement.height === 0) {
+    console.error('Canvas PixiJS width/height = 0, flux non publié');
+    alert('Erreur : le canvas PixiJS est vide ou masqué, impossible de publier le flux.');
+    return;
+  }
+  // Vérifie que le canvas capturé est bien le canvas PixiJS
+  const pixiApp = canvasRef.value && canvasRef.value.__pixiApp;
+  if (pixiApp && pixiApp.view) {
+    console.log('DEBUG: canvasElement === pixiApp.view ?', canvasElement === pixiApp.view);
+  } else {
+    console.log('DEBUG: Impossible de trouver pixiApp sur canvasRef');
+  }
+  console.log('DEBUG: canvasRef.value =', canvasRef.value);
+
+  // Log la taille du canvas
+  console.log('DEBUG: canvasElement.width/height =', canvasElement.width, canvasElement.height);
+
+  // Log le backgroundColor du PixiJS (si possible)
+  if (pixiApp) {
+    console.log('DEBUG: pixiApp.backgroundColor =', pixiApp.backgroundColor);
+  }
+
+  // Test: dessine un carré rouge sur le canvas juste avant captureStream
+  try {
+    const ctx = canvasElement.getContext && canvasElement.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = 'red';
+      ctx.fillRect(10, 10, 100, 100);
+      console.log('DEBUG: Carré rouge dessiné sur le canvas HTML');
+    } else {
+      console.log('DEBUG: Pas de contexte 2D pour dessiner le carré rouge');
+    }
+  } catch (e) {
+    console.log('DEBUG: Erreur lors du dessin du carré rouge', e);
+  }
+
+  console.log('DEBUG: captureStream appelé, canvasElement =', canvasElement);
   const stream = canvasElement.captureStream();
+  console.log('DEBUG: stream =', stream);
+
+  // DEBUG: Affiche le flux du canvas localement dans une <video>
+  let debugVideo = document.getElementById('debug-canvas-video') as HTMLVideoElement | null;
+  console.log('DEBUG: debugVideo initial =', debugVideo);
+  if (!debugVideo) {
+    debugVideo = document.createElement('video') as HTMLVideoElement;
+    debugVideo.id = 'debug-canvas-video';
+    debugVideo.style.position = 'fixed';
+    debugVideo.style.bottom = '20px';
+    debugVideo.style.right = '20px';
+    debugVideo.style.width = '320px';
+    debugVideo.style.zIndex = '99999';
+    debugVideo.autoplay = true;
+    debugVideo.muted = true;
+    debugVideo.playsInline = true;
+    document.body.appendChild(debugVideo);
+    console.log('DEBUG: debugVideo créé et ajouté au DOM', debugVideo);
+  }
+  debugVideo.srcObject = stream;
+  console.log('DEBUG: debugVideo.srcObject affecté', debugVideo);
+
   if (!stream) {
     console.error('Impossible de capturer le flux du canvas');
     return;
@@ -519,29 +584,54 @@ const messages = ref<
 >([]);
 const newMessage = ref("");
 
+// --- SOCKET.IO CHAT ---
+const socket = ref<Socket|null>(null);
+const roomId = ref<string>("studio-main"); // À remplacer dynamiquement par l'id du stream si besoin
+const username = ref<string>("Streamer"); // Peut être personnalisé
+
+onMounted(() => {
+  // Connexion Socket.IO
+  socket.value = io("http://localhost:3001", { transports: ["websocket"] });
+  socket.value.emit("join-room", roomId.value);
+
+  // Réception des messages
+  socket.value.on("chat-message", (msg: any) => {
+    messages.value.push(msg);
+    setTimeout(() => {
+      const chatContainer = document.querySelector(".chat-messages");
+      if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+    }, 100);
+  });
+});
+
+onUnmounted(() => {
+  if (socket.value) {
+    socket.value.emit("leave-room", roomId.value);
+    socket.value.disconnect();
+  }
+});
+
 const toggleChat = () => {
   showChat.value = !showChat.value;
 };
 
-const sendMessage = () => {
-  if (newMessage.value.trim()) {
-    messages.value.push({
+const sendMessage = (text?: string) => {
+  const messageText = text ?? newMessage.value;
+  if (messageText.trim() && socket.value) {
+    const msg = {
       id: Date.now().toString(),
-      text: newMessage.value,
+      text: messageText,
       sender: "user",
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       }),
-    });
+    };
+    socket.value.emit("chat-message", { roomId: roomId.value, message: msg });
     newMessage.value = "";
-
-    // Auto-scroll to bottom
     setTimeout(() => {
       const chatContainer = document.querySelector(".chat-messages");
-      if (chatContainer) {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-      }
+      if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
     }, 100);
   }
 };
@@ -828,9 +918,7 @@ const createImageElement = (imageUrl: string = ''): CanvasElement => {
             <Magnet class="w-5 h-5" />
           </button>
           <div class="flex items-center gap-2">
-            <button @click="toggleChat" class="p-2 rounded-full hover:bg-gray-700">
-              <MessageSquare class="w-5 h-5" />
-            </button>
+
             
             <!-- Bouton de partage -->
             <div class="relative">

@@ -19,12 +19,6 @@ watch(
   { immediate: true },
 );
 
-// Debug: Vérifier quand le composant est monté et les propriétés
-onMounted(() => {
-  console.log("MainLayout monté");
-  console.log("Route actuelle:", route.path);
-  console.log("showNavbar:", showNavbar.value);
-});
 </script>
 
 <template>
