@@ -102,6 +102,135 @@ const createTextElement = (): CanvasElement => {
 // Références
 const canvasRef = ref<InstanceType<typeof Canvas> | null>(null);
 
+// État pour la sélection de la caméra
+const videoDevices = ref<MediaDeviceInfo[]>([]);
+const showCameraSelector = ref(false);
+const isMac = navigator.platform.toUpperCase().includes('MAC');
+
+// Lister les caméras disponibles
+// Vérifier si la caméra Continuity est disponible (macOS 13+)
+const checkContinuityCamera = async () => {
+  if (!isMac) return null;
+  
+  try {
+    // Essayer d'accéder à la caméra Continuity avec une contrainte spécifique
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        // Ces contraintes peuvent aider à cibler la caméra Continuity
+        advanced: [{
+          facingMode: { exact: 'environment' },
+          deviceId: { exact: 'continuitycamera' }
+        }]
+      }
+    });
+    
+    // Si on arrive ici, la caméra Continuity est disponible
+    const track = stream.getVideoTracks()[0];
+    const deviceId = track.getSettings().deviceId;
+    
+    // Arrêter le flux temporaire
+    track.stop();
+    
+    return {
+      deviceId,
+      label: 'iPhone (Continuity Camera)',
+      kind: 'videoinput'
+    };
+  } catch (error) {
+    console.log('Continuity Camera non disponible:', error);
+    return null;
+  }
+};
+
+const listVideoDevices = async () => {
+  try {
+    // Vérifier si l'API est disponible
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      throw new Error('Votre navigateur ne supporte pas la sélection de caméra');
+    }
+    
+    // Vérifier d'abord la caméra Continuity sur Mac
+    if (isMac) {
+      const continuityCamera = await checkContinuityCamera();
+      if (continuityCamera) {
+        videoDevices.value = [continuityCamera];
+        await selectCamera(continuityCamera.deviceId);
+        return;
+      }
+    }
+
+    // D'abord, essayer d'obtenir la liste des périphériques sans contraintes
+    let devices = await navigator.mediaDevices.enumerateDevices();
+    
+    // Si aucune permission n'est accordée, demander l'accès à la caméra
+    if (!devices.some(device => device.kind === 'videoinput' && device.label)) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { width: 1280, height: 720 } 
+        });
+        // Arrêter le flux immédiatement, on a juste besoin des permissions
+        stream.getTracks().forEach(track => track.stop());
+        // Recharger la liste des périphériques maintenant que les permissions sont accordées
+        devices = await navigator.mediaDevices.enumerateDevices();
+      } catch (err) {
+        if (err.name === 'NotAllowedError') {
+          throw new Error('Permission d\'accès à la caméra refusée');
+        } else if (err.name === 'NotFoundError') {
+          throw new Error('Aucune caméra trouvée sur cet appareil');
+        }
+        throw err;
+      }
+    }
+
+    // Filtrer pour ne garder que les périphériques vidéo
+    videoDevices.value = devices.filter(device => device.kind === 'videoinput');
+    
+    if (videoDevices.value.length === 0) {
+      throw new Error('Aucune caméra disponible');
+    }
+    
+    // Si une seule caméra est disponible, la sélectionner automatiquement
+    if (videoDevices.value.length === 1) {
+      await selectCamera(videoDevices.value[0].deviceId);
+    } else if (videoDevices.value.length > 1) {
+      // Trier pour mettre les caméras intégrées en premier
+      videoDevices.value.sort((a, b) => {
+        const aIsBack = a.label.toLowerCase().includes('back') || a.label.toLowerCase().includes('arrière');
+        const bIsBack = b.label.toLowerCase().includes('back') || b.label.toLowerCase().includes('arrière');
+        return (aIsBack === bIsBack) ? 0 : aIsBack ? -1 : 1;
+      });
+      showCameraSelector.value = true;
+    }
+  } catch (error) {
+    console.error('Erreur caméra:', error);
+    // Afficher un message d'erreur à l'utilisateur
+    alert(`Erreur: ${error.message || 'Impossible d\'accéder aux caméras'}`);
+  }
+};
+
+// Sélectionner une caméra spécifique
+const selectCamera = async (deviceId: string) => {
+  try {
+    const constraints = {
+      video: { 
+        deviceId: { exact: deviceId },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    };
+    
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const videoElement = createVideoElement(stream);
+    elements.value = [...elements.value, videoElement];
+    showCameraSelector.value = false;
+  } catch (error) {
+    console.error('Erreur lors de l\'accès à la caméra:', error);
+  }
+};
+
 // État de sélection
 const selectedElementId = ref<string | null>(null);
 
@@ -352,6 +481,173 @@ const addTextElement = () => {
   elements.value = [...elements.value, newElement];
 };
 
+const addVideoElement = async (forceContinuity = false) => {
+  try {
+    showCameraSelector.value = false;
+    
+    if (forceContinuity && isMac) {
+      const constraints = {
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          advanced: [{
+            facingMode: { exact: 'environment' },
+            deviceId: { exact: 'continuitycamera' }
+          }]
+        },
+        audio: false
+      };
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const videoElement = createVideoElement(stream);
+        elements.value = [...elements.value, videoElement];
+        return;
+      } catch (error) {
+        console.warn('Impossible d\'accéder à la caméra Continuity:', error);
+        // Continuer avec la détection normale
+      }
+    }
+    
+    // Réinitialiser la liste des caméras pour forcer un nouvel accès
+    videoDevices.value = [];
+    await listVideoDevices();
+  } catch (error) {
+    console.error('Erreur caméra:', error);
+    alert(`Erreur: ${error.message || 'Impossible d\'accéder aux caméras'}`);
+  }
+};
+
+// Cache pour les images chargées
+const imageCache = new Map<string, HTMLImageElement>();
+
+// Fonction pour charger une image et la mettre en cache
+const loadImage = (url: string): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    // Vérifier si l'image est déjà en cache
+    if (imageCache.has(url)) {
+      const cachedImg = imageCache.get(url);
+      if (cachedImg?.complete) {
+        return resolve(cachedImg);
+      }
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // Pour éviter les problèmes CORS
+    
+    img.onload = () => {
+      imageCache.set(url, img);
+      resolve(img);
+    };
+    
+    img.onerror = (err) => {
+      console.error('Erreur de chargement de l\'image:', url, err);
+      reject(new Error(`Impossible de charger l'image: ${url}`));
+    };
+    
+    img.src = url;
+  });
+};
+
+const addImageElement = async () => {
+  // Créer un input de type file
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  
+  // Gérer la sélection de fichier
+  input.onchange = async (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    
+    if (!file) return;
+    
+    try {
+      // Créer une URL pour l'image sélectionnée
+      const imageUrl = URL.createObjectURL(file);
+      
+      // Charger l'image et attendre qu'elle soit complètement chargée
+      const img = await loadImage(imageUrl);
+      
+      // Créer un nouvel élément image avec l'URL
+      const newElement = createImageElement(imageUrl);
+      
+      // Calculer le ratio d'aspect de l'image
+      const aspectRatio = img.width / img.height;
+      
+      // Mettre à jour les propriétés de l'élément
+      newElement.data = {
+        ...newElement.data,
+        src: imageUrl,
+        aspectRatio,
+        originalWidth: img.width,
+        originalHeight: img.height,
+        // Ajouter une référence à l'image chargée
+        _img: img
+      };
+      
+      // Ajuster les dimensions pour conserver le ratio d'aspect
+      // Limiter la taille maximale à 50% de la largeur/hauteur du canvas
+      const maxWidth = canvasDimensions.value.width * 0.5;
+      const maxHeight = canvasDimensions.value.height * 0.5;
+      
+      if (img.width > maxWidth) {
+        newElement.width = maxWidth;
+        newElement.height = maxWidth / aspectRatio;
+      } else if (img.height > maxHeight) {
+        newElement.height = maxHeight;
+        newElement.width = maxHeight * aspectRatio;
+      } else {
+        newElement.width = img.width;
+        newElement.height = img.height;
+      }
+      
+      // Ajouter l'élément au canvas
+      elements.value = [...elements.value, newElement];
+      
+    } catch (error) {
+      console.error('Erreur lors du chargement de l\'image:', error);
+      alert(`Erreur: ${error.message || 'Impossible de charger l\'image'}`);
+    }
+  };
+  
+  // Déclencher la boîte de dialogue de sélection de fichier
+  input.click();
+};
+
+// Fonction utilitaire pour créer un nouvel élément vidéo (webcam) centré sur la grille 32x18
+const createVideoElement = (stream: MediaStream | null = null): CanvasElement => {
+  const cellCountX = 32;
+  const cellCountY = 18;
+
+  const cellWidth = canvasDimensions.value.width / cellCountX;
+  const cellHeight = canvasDimensions.value.height / cellCountY;
+
+  // Taille de la vidéo en cellules (16:9 par défaut)
+  const videoWidth = 8 * cellWidth;
+  const videoHeight = (videoWidth * 9) / 16;
+
+  // Positionner au centre
+  const x = (canvasDimensions.value.width - videoWidth) / 2;
+  const y = (canvasDimensions.value.height - videoHeight) / 2;
+
+  return {
+    id: `video-${Date.now()}`,
+    type: 'camera', // Utiliser le même type que pour la webcam
+    x,
+    y,
+    width: videoWidth,
+    height: videoHeight,
+    rotation: 0,
+    locked: false,
+    visible: true,
+    data: {
+      stream: stream,
+      isWebcam: true
+    },
+  };
+};
+
 // Fonction utilitaire pour créer un nouvel élément image centré sur la grille 32x18
 const createImageElement = (imageUrl: string = ''): CanvasElement => {
   const cellCountX = 32; // Largeur en cellules
@@ -384,62 +680,10 @@ const createImageElement = (imageUrl: string = ''): CanvasElement => {
       // Valeurs par défaut pour la gestion de l'image
       aspectRatio: 4/3, // Ratio largeur/hauteur (4:3 par défaut)
       originalWidth: imageWidthCells * cellWidth,
-      originalHeight: imageHeightCells * cellHeight,
-    },
-  };
-};
-
-const addImageElement = () => {
-  // Créer un input de type file
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  
-  // Gérer la sélection de fichier
-  input.onchange = (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    const file = target.files?.[0];
-    
-    if (file) {
-      // Créer une URL pour l'image sélectionnée
-      const imageUrl = URL.createObjectURL(file);
-      
-      // Créer un élément image pour obtenir ses dimensions
-      const img = new Image();
-      img.onload = () => {
-        // Créer un nouvel élément image avec l'URL
-        const newElement = createImageElement(imageUrl);
-        
-        // Mettre à jour les dimensions pour conserver le ratio d'aspect
-        const aspectRatio = img.width / img.height;
-        newElement.data.aspectRatio = aspectRatio;
-        
-        // Ajuster la largeur ou la hauteur pour conserver le ratio
-        if (aspectRatio > 1) {
-          // Image plus large que haute
-          newElement.height = newElement.width / aspectRatio;
-        } else {
-          // Image plus haute que large ou carrée
-          newElement.width = newElement.height * aspectRatio;
-        }
-        
-        // Ajouter l'élément au canvas
-        elements.value = [...elements.value, newElement];
-        
-        // Libérer la mémoire de l'URL de l'objet quand elle n'est plus nécessaire
-        // (par exemple, quand l'élément est supprimé ou remplacé)
-        // Note: Dans une application réelle, vous voudrez peut-être gérer cela différemment
-        // pour les images qui sont réutilisées ou sauvegardées
-      };
-      
-      // Définir la source de l'image pour déclencher le chargement
-      img.src = imageUrl;
+      originalHeight: imageHeightCells * cellHeight
     }
   };
-  
-  // Déclencher la boîte de dialogue de sélection de fichier
-  input.click();
-};
+}
 
 </script>
 
@@ -452,8 +696,46 @@ const addImageElement = () => {
       :show-grid="showGrid"
       @add-text="addTextElement"
       @add-image="addImageElement"
+      @add-video="addVideoElement"
       @toggle-grid="showGrid = !showGrid"
     />
+    
+    <!-- Boîte de dialogue de sélection de caméra -->
+    <div v-if="showCameraSelector" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-zinc-800 rounded-lg p-6 w-96">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-white text-lg font-semibold">Sélectionner une caméra</h3>
+          <button 
+            v-if="isMac"
+            @click="addVideoElement(true)"
+            class="text-blue-400 hover:text-blue-300 text-sm flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+            </svg>
+            Utiliser iPhone
+          </button>
+        </div>
+        <div class="space-y-2">
+          <button
+            v-for="device in videoDevices"
+            :key="device.deviceId"
+            @click="selectCamera(device.deviceId)"
+            class="w-full p-3 bg-zinc-700 hover:bg-zinc-600 rounded text-white text-left"
+          >
+            {{ device.label || `Caméra ${device.deviceId.substring(0, 8)}` }}
+          </button>
+        </div>
+        <div class="mt-4 flex justify-end">
+          <button
+            @click="showCameraSelector = false"
+            class="px-4 py-2 bg-zinc-600 hover:bg-zinc-500 rounded text-white"
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Main content -->
     <div class="flex-1 flex flex-col h-full overflow-hidden ml-0 transition-all duration-300">

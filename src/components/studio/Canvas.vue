@@ -392,16 +392,31 @@ function drawCanvas() {
       }
       case "image": {
         if (element.data?.src) {
-          // Images mises en cache (optimisation possible)
-          const img = new window.Image();
-          img.src = element.data.src;
-          ctx.drawImage(
-            img,
-            -element.width / 2,
-            -element.height / 2,
-            element.width,
-            element.height,
-          );
+          // Essayer de dessiner l'image directement depuis le cache
+          if (element.data._img) {
+            // Utiliser l'image déjà chargée
+            ctx.drawImage(
+              element.data._img,
+              -element.width / 2,
+              -element.height / 2,
+              element.width,
+              element.height,
+            );
+          } else {
+            // Fallback: charger l'image normalement
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = element.data.src;
+            if (img.complete) {
+              ctx.drawImage(
+                img,
+                -element.width / 2,
+                -element.height / 2,
+                element.width,
+                element.height,
+              );
+            }
+          }
 
           // Dessiner le contour et les poignées de redimensionnement si l'élément est sélectionné
           if (props.selectedElementId === element.id) {
