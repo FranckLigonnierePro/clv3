@@ -3,9 +3,22 @@ import { ref, onMounted, onUnmounted } from "vue";
 import Canvas from "../components/studio/Canvas.vue";
 import LeftPanel from "../components/studio/LeftPanel.vue";
 import ChatSidebar from "../components/studio/ChatSidebar.vue";
-import { Grid2X2, Magnet } from "lucide-vue-next";
+import { Grid2X2, Magnet, Share2, MessageSquare, Loader2, X, Copy } from "lucide-vue-next";
 import StudioFooter from "../components/studio/StudioFooter.vue";
 import type { CanvasElement } from "../components/studio/Canvas.vue";
+
+const showShareModal = ref(false);
+
+// Copier le texte dans le presse-papier
+const copyToClipboard = async () => {
+  if (!shareLink.value) return;
+  try {
+    await window.navigator.clipboard.writeText(shareLink.value);
+  } catch (err) {
+    console.error('Erreur lors de la copie dans le presse-papier:', err);
+    alert('Impossible de copier le lien dans le presse-papier');
+  }
+};
 
 onMounted(() => {
   console.log("Studio component mounted");
@@ -25,6 +38,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener("resize", updateCanvasDimensions);
+  if (viewerCountInterval.value !== null) {
+    clearInterval(viewerCountInterval.value);
+  }
 });
 
 const updateCanvasDimensions = () => {
@@ -202,6 +218,96 @@ const changeScene = (sceneId: number) => {
 
 // UI State
 const showLeftPanel = ref(true);
+const shareLink = ref('');
+const isGeneratingLink = ref(false);
+const shareError = ref('');
+const viewerCount = ref(0);
+const viewerCountInterval = ref<number | null>(null);
+const customRoomName = ref('');
+
+// Fermer la modale après la génération du lien
+const handleGenerateLink = async () => {
+  await generateShareLink();
+  if (shareLink.value) {
+    setTimeout(() => {
+      showShareModal.value = false;
+    }, 1500);
+  }
+};
+
+// Mettre à jour le compteur de spectateurs
+const updateViewerCount = async () => {
+  if (!shareLink.value) return;
+  
+  try {
+    const url = new URL(shareLink.value);
+    const roomName = url.searchParams.get('room');
+    
+    if (!roomName) return;
+    
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/viewers/${roomName}`);
+    const data = await response.json();
+    viewerCount.value = data.viewers;
+  } catch (err) {
+    console.error('Erreur lors de la récupération du nombre de spectateurs:', err);
+  }
+};
+
+// Générer un lien de partage
+const generateShareLink = async () => {
+  try {
+    isGeneratingLink.value = true;
+    shareError.value = '';
+    
+    // Utiliser le nom personnalisé ou générer un ID de salle unique
+    const roomId = customRoomName.value.trim() || `room-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    
+    // Appeler l'API pour obtenir un token
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        roomName: roomId,
+        participantName: 'host',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Erreur lors de la génération du token');
+    }
+
+    const data = await response.json();
+    
+    // Construire l'URL de partage
+    const currentUrl = new URL(window.location.origin);
+    currentUrl.pathname = '/watch';
+    currentUrl.searchParams.set('room', roomId);
+    currentUrl.searchParams.set('token', data.token);
+    
+    shareLink.value = currentUrl.toString();
+    
+    // Copier dans le presse-papier
+    await navigator.clipboard.writeText(shareLink.value);
+    
+    // Afficher un message de succès
+    alert('Lien copié dans le presse-papier !');
+    
+    // Démarrer la mise à jour du compteur de spectateurs
+    if (viewerCountInterval.value !== null) {
+      clearInterval(viewerCountInterval.value);
+    }
+    await updateViewerCount();
+    viewerCountInterval.value = window.setInterval(updateViewerCount, 5000);
+    
+  } catch (err) {
+    console.error('Erreur lors de la génération du lien:', err);
+    shareError.value = 'Erreur lors de la génération du lien. Veuillez réessayer.';
+  } finally {
+    isGeneratingLink.value = false;
+  }
+};
 const showChat = ref(false);
 const messages = ref<
   Array<{ id: string; text: string; sender: string; time: string }>
@@ -363,6 +469,92 @@ const addImageElement = () => {
           >
             <Magnet class="w-5 h-5" />
           </button>
+          <div class="flex items-center gap-2">
+            <button @click="toggleChat" class="p-2 rounded-full hover:bg-gray-700">
+              <MessageSquare class="w-5 h-5" />
+            </button>
+            
+            <!-- Bouton de partage -->
+            <div class="relative">
+              <div class="flex items-center gap-2">
+                <button 
+                  @click="showShareModal = true" 
+                  class="p-2 rounded-full hover:bg-gray-700 flex items-center gap-1"
+                  title="Générer un lien de partage"
+                >
+                  <Share2 class="w-5 h-5" />
+                  <span class="text-sm">Partager</span>
+                </button>
+                
+                <!-- Compteur de spectateurs -->
+                <div v-if="shareLink" class="flex items-center gap-1 bg-gray-800 px-3 py-1 rounded-full">
+                  <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                  <span class="text-sm">{{ viewerCount }} spectateur{{ viewerCount !== 1 ? 's' : '' }}</span>
+                </div>
+              </div>
+              
+              <!-- Message d'erreur -->
+              <div v-if="shareError" class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                {{ shareError }}
+              </div>
+              
+              <!-- Modale de partage -->
+              <div v-if="showShareModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+                  <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">Partager la diffusion</h3>
+                    <button @click="showShareModal = false" class="text-gray-400 hover:text-white">
+                      <X class="w-5 h-5" />
+                    </button>
+                  </div>
+                  
+                  <div class="space-y-4">
+                    <div>
+                      <label for="room-name" class="block text-sm font-medium text-gray-300 mb-1">
+                        Nom de la salle (optionnel)
+                      </label>
+                      <input
+                        id="room-name"
+                        v-model="customRoomName"
+                        type="text"
+                        placeholder="Ma diffusion en direct"
+                        class="w-full bg-gray-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <button
+                      @click="handleGenerateLink"
+                      :disabled="isGeneratingLink"
+                      class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      :class="{ 'opacity-50 cursor-not-allowed': isGeneratingLink }"
+                    >
+                      <Loader2 v-if="isGeneratingLink" class="w-4 h-4 animate-spin" />
+                      {{ shareLink ? 'Lien copié !' : 'Générer le lien' }}
+                    </button>
+                    
+                    <div v-if="shareLink" class="mt-4 p-3 bg-gray-700 rounded-lg">
+                      <p class="text-sm text-gray-300 mb-2">Lien de partage :</p>
+                      <div class="flex items-center gap-2">
+                        <input
+                          type="text"
+                          :value="shareLink"
+                          readonly
+                          class="flex-1 bg-gray-800 text-white text-sm p-2 rounded border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <button
+                          @click="copyToClipboard"
+                          class="p-2 bg-gray-700 hover:bg-gray-600 rounded"
+                          title="Copier le lien"
+                        >
+                          <Copy class="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           
           <!-- Bouton Grille -->
           <button

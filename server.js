@@ -33,6 +33,74 @@ console.log("Configuration LiveKit chargée:", {
 app.use(cors());
 app.use(express.json());
 
+// Stockage en mémoire des spectateurs par salle
+const roomViewers = new Map();
+
+// Middleware pour suivre les connexions/déconnexions
+app.use((req, res, next) => {
+  if (req.path === '/api/viewers' && req.method === 'POST') {
+    const { roomName, action } = req.body;
+    
+    if (!roomName || !action) {
+      console.log('Requête invalide, roomName ou action manquant:', { roomName, action });
+      return next();
+    }
+    
+    console.log(`Action ${action} reçue pour la salle ${roomName}`);
+    
+    if (action === 'join') {
+      const currentCount = roomViewers.get(roomName) || 0;
+      roomViewers.set(roomName, currentCount + 1);
+      console.log(`Nouveau spectateur dans ${roomName}. Total: ${currentCount + 1}`);
+    } else if (action === 'leave') {
+      const currentCount = roomViewers.get(roomName) || 0;
+      const newCount = Math.max(0, currentCount - 1);
+      
+      if (newCount <= 0) {
+        roomViewers.delete(roomName);
+        console.log(`Dernier spectateur a quitté ${roomName}`);
+      } else {
+        roomViewers.set(roomName, newCount);
+        console.log(`Spectateur a quitté ${roomName}. Restants: ${newCount}`);
+      }
+    }
+  }
+  next();
+});
+
+// Endpoint pour gérer les vues
+app.post('/api/viewers', (req, res) => {
+  const { roomName, action } = req.body;
+  
+  if (!roomName || !action) {
+    console.log('Requête POST invalide:', { roomName, action });
+    return res.status(400).json({ error: 'Missing roomName or action' });
+  }
+  
+  const viewers = roomViewers.get(roomName) || 0;
+  console.log(`Requête POST /api/viewers - Salle: ${roomName}, Action: ${action}, Spectateurs: ${viewers}`);
+  
+  res.json({ 
+    viewers,
+    roomName,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Endpoint pour obtenir le nombre de spectateurs
+app.get('/api/viewers/:roomName', (req, res) => {
+  const { roomName } = req.params;
+  const viewers = roomViewers.get(roomName) || 0;
+  
+  console.log(`Requête GET /api/viewers/${roomName} - Spectateurs: ${viewers}`);
+  
+  res.json({ 
+    viewers,
+    roomName,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Générer un token LiveKit
 app.post("/api/token", async (req, res) => {
   try {
@@ -73,12 +141,18 @@ app.post("/api/token", async (req, res) => {
       ttl: "10m", // 10 minutes
     });
 
-    // Ajouter les autorisations de base
+    // Déterminer les permissions en fonction du type de participant
+    const isViewer = participantName.startsWith('viewer-');
+    
     at.addGrant({
       roomJoin: true,
       room: roomName,
-      canPublish: true,
+      canPublish: !isViewer, // Seul l'hôte peut publier
       canSubscribe: true,
+      canPublishData: !isViewer,
+      canUpdateOwnMetadata: !isViewer,
+      hidden: isViewer,
+      recorder: false
     });
 
     // Générer le token JWT
