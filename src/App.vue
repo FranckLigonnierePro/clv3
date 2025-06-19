@@ -105,7 +105,6 @@ const setupAuthListener = () => {
   const {
     data: { subscription },
   } = onAuthStateChange(async (event, session) => {
-    console.log("Changement d'état d'authentification:", event);
 
     try {
       // Mettre à jour la session dans le store
@@ -119,7 +118,6 @@ const setupAuthListener = () => {
 
           // Ne pas rediriger depuis la page de visionnage
           if (route.path.startsWith("/watch")) {
-            console.log("Page de visionnage détectée, pas de redirection");
             return;
           }
 
@@ -127,7 +125,6 @@ const setupAuthListener = () => {
           if (isPublicPath(route.path) && route.path !== "/") {
             const redirectPath =
               (route.query.redirect as string) || "/app/dashboard";
-            console.log("Redirection vers:", redirectPath);
             router.push(redirectPath);
           }
           break;
@@ -143,11 +140,9 @@ const setupAuthListener = () => {
           break;
 
         case "TOKEN_REFRESHED":
-          console.log("Token rafraîchi avec succès");
           break;
 
         case "USER_UPDATED":
-          console.log("Utilisateur mis à jour:", session?.user);
           break;
       }
     } catch (error) {

@@ -27,10 +27,6 @@ export default defineConfig({
       disableDotRule: true,
       verbose: true,
     },
-    // Forcer le rechargement des pages 404
-    hmr: {
-      overlay: false,
-    },
     // Proxy configuration for API requests
     proxy: {
       "/api": {
@@ -41,6 +37,7 @@ export default defineConfig({
     },
     // HMR configuration
     hmr: {
+      overlay: false,
       host: "localhost",
       port: 3000,
     },

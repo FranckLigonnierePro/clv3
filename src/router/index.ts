@@ -312,12 +312,6 @@ const router = createRouter({
   // Forcer le mode history avec une base propre
   history: createWebHistory("/"),
   routes,
-
-  // Log de la configuration des routes pour le débogage
-  onBeforeRouteLeave: (to, from, next) => {
-    console.log("Configuration des routes:", JSON.stringify(routes, null, 2));
-    next();
-  },
   scrollBehavior(to, from, savedPosition) {
     // Faire défiler vers le haut lors du changement de route
     if (savedPosition) {
@@ -328,96 +322,19 @@ const router = createRouter({
   },
 });
 
-// Vérifier la configuration du routeur
-console.log("Configuration du routeur:", {
-  current: router.currentRoute.value,
-  options: router.options,
-  hasWatchRoute: router.hasRoute("public-watch"),
-});
 
-// Vérifier la configuration de l'historique
-console.log("Configuration de l'historique:", {
-  location: window.location,
-  history: {
-    length: window.history.length,
-    state: window.history.state,
-  },
-});
+
 
 // Vérifier la configuration du routeur
-console.log("=== ROUTER CONFIGURATION ===");
-console.log(
-  "Routes enregistrées:",
-  router.getRoutes().map((r) => ({
-    path: r.path,
-    name: r.name,
-    meta: r.meta,
-    regexp: r.regexp?.toString(),
-    components: r.components ? Object.keys(r.components) : [],
-  })),
-);
 
-// Afficher la configuration complète du routeur
-console.log("=== ROUTER FULL CONFIGURATION ===");
-console.log(
-  JSON.stringify(
-    {
-      currentRoute: router.currentRoute.value,
-      options: {
-        ...router.options,
-        // Éviter les références circulaires dans les logs
-        routes: router.options.routes.map((r) => ({
-          path: r.path,
-          name: r.name,
-          meta: r.meta,
-          component: r.component ? "Component" : "undefined",
-          children: r.children ? "[...]" : "none",
-        })),
-      },
-      hasWatchRoute: router.hasRoute("public-watch"),
-      hasAppWatchRoute: router.hasRoute("watch"),
-    },
-    null,
-    2,
-  ),
-);
 
 // Navigation guard globale
 router.beforeEach(async (to, from, next) => {
-  console.log("=== NAVIGATION START ===");
-  console.log("De:", from.path, "->", "Vers:", to.path);
-  console.log("URL complète:", window.location.href);
-  console.log("Configuration du routeur:", {
-    currentRoute: router.currentRoute.value,
-    hasRoute: router.hasRoute("public-watch"),
-    getRoutes: router.getRoutes().map((r) => ({
-      path: r.path,
-      name: r.name,
-      meta: r.meta,
-    })),
-  });
   try {
     // Définir le titre de la page
     const title = (to.meta.title as string) || "ClipLive";
     document.title = title === "ClipLive" ? title : `${title} | ClipLive`;
 
-    // Vérifier si la route est publique ou nécessite une authentification
-    console.log(
-      "Navigation vers:",
-      to.path,
-      "fullPath:",
-      to.fullPath,
-      "meta:",
-      to.meta,
-    );
-    console.log(
-      "Routes correspondantes:",
-      to.matched.map((m) => ({
-        path: m.path,
-        name: m.name,
-        meta: m.meta,
-      })),
-    );
 
     const isPublic = to.meta.public === true;
     const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
@@ -425,15 +342,6 @@ router.beforeEach(async (to, from, next) => {
       record.path.startsWith("/auth"),
     );
 
-    console.log("Valeurs de routage:", {
-      isPublic,
-      requiresAuth,
-      isAuthRoute,
-      meta: to.meta,
-      path: to.path,
-      fullPath: to.fullPath,
-      matched: to.matched.length > 0,
-    });
 
     // Récupérer l'utilisateur actuel de manière sécurisée
     const {
@@ -479,9 +387,6 @@ router.beforeEach(async (to, from, next) => {
 
     // Ne pas rediriger si c'est une route publique ou marquée comme ne nécessitant pas d'authentification
     if (isPublic) {
-      console.log(
-        "Route publique détectée, accès autorisé sans authentification",
-      );
       return next();
     }
 
