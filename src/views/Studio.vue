@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
+import { Room, createLocalVideoTrack, LocalVideoTrack } from "livekit-client"; // LiveKit pour le streaming
 import Canvas from "../components/studio/Canvas.vue";
 import LeftPanel from "../components/studio/LeftPanel.vue";
 import ChatSidebar from "../components/studio/ChatSidebar.vue";
@@ -23,6 +24,11 @@ const copyToClipboard = async () => {
 onMounted(() => {
   console.log("Studio component mounted");
 });
+
+onUnmounted(() => {
+  stopLivekitStream();
+});
+
 
 // Type d'élément de canvas
 
@@ -279,16 +285,86 @@ const isRecording = ref(false);
 const isMicrophoneOn = ref(true);
 const isCameraOn = ref(true);
 
-// Gestion des actions
-const toggleLive = () => {
-  isLive.value = !isLive.value;
-  // Ajouter ici la logique pour démarrer/arrêter le streaming
-};
+// Connexion LiveKit
+const roomLivekit = ref<Room | null>(null);
 
-const toggleRecording = () => {
-  isRecording.value = !isRecording.value;
+// Démarrer le stream LiveKit (publie le flux vidéo du canvas)
+async function startLivekitStream(roomId: string) {
+  // Récupérer le token pour la salle LiveKit
+  const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/livekit-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      roomName: roomId,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Erreur lors de la récupération du token LiveKit');
+  }
+
+  const data = await response.json();
+  const token = data.token;
+
+  // Créer une nouvelle connexion LiveKit
+  const livekit = new Room({
+    url: 'ws://localhost:7880', // à adapter si besoin
+    token,
+  });
+
+  // Se connecter à la salle LiveKit
+  await livekit.connect();
+
+  // Publier le flux vidéo du canvas
+  if (!canvasRef.value || typeof canvasRef.value.getCanvas !== 'function') {
+    console.error('canvasRef ou getCanvas non disponible');
+    return;
+  }
+  const canvasElement = canvasRef.value.getCanvas();
+  if (!canvasElement) {
+    console.error('Impossible de récupérer l’élément <canvas>');
+    return;
+  }
+  const stream = canvasElement.captureStream();
+  if (!stream) {
+    console.error('Impossible de capturer le flux du canvas');
+    return;
+  }
+  const [videoTrack] = stream.getVideoTracks();
+  if (!videoTrack) {
+    console.error('Aucune piste vidéo trouvée dans le flux du canvas');
+    return;
+  }
+  const localTrack = new LocalVideoTrack(videoTrack);
+  await livekit.localParticipant.publishTrack(localTrack);
+
+  // Conserver la connexion LiveKit
+  roomLivekit.value = livekit;
+}
+
+
+// Arrêter le stream LiveKit
+async function stopLivekitStream() {
+  if (roomLivekit.value) {
+    // Fermer la connexion LiveKit
+    await roomLivekit.value.disconnect();
+    roomLivekit.value = null;
+  }
+}
+
+// Gestion des actions
+async function toggleLive() {
+  isLive.value = !isLive.value;
+  if (isLive.value) {
+    // Démarrer le stream LiveKit
+    await startLivekitStream(roomId);
+  } else {
+    // Arrêter le stream LiveKit
+    await stopLivekitStream();
   // Ajouter ici la logique pour démarrer/arrêter l'enregistrement
-};
+}};
 
 const toggleMicrophone = () => {
   isMicrophoneOn.value = !isMicrophoneOn.value;
@@ -643,7 +719,7 @@ const createVideoElement = (stream: MediaStream | null = null): CanvasElement =>
     visible: true,
     data: {
       stream: stream,
-      isWebcam: true
+      isWebcam: true,
     },
   };
 };
@@ -678,12 +754,12 @@ const createImageElement = (imageUrl: string = ''): CanvasElement => {
     data: {
       src: imageUrl,
       // Valeurs par défaut pour la gestion de l'image
-      aspectRatio: 4/3, // Ratio largeur/hauteur (4:3 par défaut)
+      aspectRatio: 4 / 3, // Ratio largeur/hauteur (4:3 par défaut)
       originalWidth: imageWidthCells * cellWidth,
-      originalHeight: imageHeightCells * cellHeight
-    }
+      originalHeight: imageHeightCells * cellHeight,
+    },
   };
-}
+};
 
 </script>
 
