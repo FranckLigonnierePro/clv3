@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { X } from "lucide-vue-next";
+import { X, Send } from "lucide-vue-next";
 
 defineProps<{
   showChat: boolean;
@@ -25,25 +25,22 @@ const sendMessage = () => {
 </script>
 
 <template>
-  <div
-    class="right-0 top-0 h-full bg-zinc-900 border-l border-zinc-800 transition-all duration-300 ease-in-out z-40 flex flex-col"
-    :class="showChat ? 'w-80' : 'w-0 opacity-0'"
-  >
+  <aside class="bg-zinc-800 rounded-s-xl transition-all duration-300 ease-in-out flex-shrink-0 h-full flex flex-col" :class="showChat ? 'block w-80' : 'hidden w-0'">
     <div class="flex items-center justify-between p-4 border-b border-zinc-800">
       <h3 class="text-white font-semibold">Chat en direct</h3>
       <button
+        class="text-zinc-400 hover:text-white focus:outline-none"
         @click="$emit('toggle-chat')"
-        class="text-zinc-400 hover:text-white"
       >
-        <X class="w-5 h-5" />
+        <XMarkIcon class="h-5 w-5" />
       </button>
     </div>
 
-    <div class="chat-messages flex-1 overflow-y-auto p-4 space-y-3">
+    <div class="flex-1 overflow-y-auto chat-messages px-4 py-2 flex flex-col gap-2">
       <div
         v-for="message in messages"
         :key="message.id"
-        class="p-3 rounded-lg max-w-[80%]"
+        class="max-w-xs px-3 py-2 rounded-lg shadow"
         :class="
           message.sender === 'user'
             ? 'ml-auto bg-blue-600 text-white'
@@ -56,28 +53,29 @@ const sendMessage = () => {
     </div>
 
     <div class="p-4 border-t border-zinc-800">
-      <form @submit.prevent="sendMessage" class="flex gap-2">
+      <form @submit.prevent="sendMessage" class="relative">
         <input
           v-model="newMessage"
           type="text"
           placeholder="Écrire un message..."
-          class="flex-1 bg-zinc-800 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-full bg-zinc-700 text-white rounded-xl px-5 py-2 pr-12 text-[13px] focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
         />
         <button
           type="submit"
-          class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-violet-500 hover:text-violet-700 focus:outline-none"
         >
-          Envoyer
+          <Send class="h-6 w-6" />
         </button>
       </form>
     </div>
-  </div>
+  </aside>
 </template>
 
 <style scoped>
+/* Chat styles */
 .chat-messages {
   scrollbar-width: thin;
-  scrollbar-color: #3f3f46 #27272a;
+  scrollbar-color: #3f3f46 #1f2937;
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -85,12 +83,26 @@ const sendMessage = () => {
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: #27272a;
-  border-radius: 3px;
+  background: #1f2937;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
   background-color: #3f3f46;
   border-radius: 3px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-messages > div {
+  animation: fadeIn 0.2s ease-out forwards;
 }
 </style>

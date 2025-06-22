@@ -22,17 +22,9 @@ watch(
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 flex flex-col">
     <!-- Barre de navigation -->
     <AppNavbar v-if="showNavbar" />
-
-    <!-- Contenu principal -->
-    <main class="flex-1">
-      <div class="main-layout">
-        <RouterView />
-      </div>
-    </main>
-  </div>
+    <RouterView />
 </template>
 
 <style scoped>

@@ -37,15 +37,10 @@ const emit = defineEmits([
 </script>
 
 <template>
-  <div
-    class="left-0 top-0 h-full bg-zinc-950 z-30 flex flex-col transition-all duration-300 ease-in-out overflow-y-auto"
-    :class="showPanel ? 'w-20' : 'w-0 opacity-0'"
-  >
     <div class="p-2 space-y-4">
       <h3 class="text-white text-xs font-semibold text-center mb-2">
         Éléments
       </h3>
-
       <div class="grid grid-cols-1 gap-3">
         <!-- Texte -->
         <button
@@ -73,9 +68,6 @@ const emit = defineEmits([
           <VideoIcon class="w-5 h-5 mb-1" />
           <span class="text-xs">Vidéo</span>
         </button>
-
-
       </div>
     </div>
-  </div>
 </template>

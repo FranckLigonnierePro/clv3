@@ -232,7 +232,7 @@ const notifications = computed(() => notificationsStore.notifications);
 </script>
 
 <template>
-  <div id="app" class="min-h-screen bg-zinc-950">
+  <div id="app">
     <!-- Conteneur de notifications -->
     <div
       class="fixed inset-0 z-50 flex flex-col items-end p-4 pointer-events-none"
@@ -293,7 +293,8 @@ body,
 #app {
   margin: 0;
   padding: 0;
-  height: 100%;
+  height: 100vh;
+  width: 100vw;
   overflow: hidden;
 }
 </style>

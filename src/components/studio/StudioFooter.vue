@@ -78,7 +78,7 @@ const handleMenuBlur = () => {
 </script>
 
 <template>
-  <footer class="fixed bottom-0 w-full h-24 bg-zinc-950 backdrop-blur flex justify-center items-center px-8 z-50">
+  <footer class="fixed bottom-0 left-0 right-0 h-16 bg-zinc-900 text-white flex items-center justify-center shadow-lg">
     <div class="flex items-center justify-center gap-4">
       <!-- Microphone -->
       <button
@@ -88,7 +88,6 @@ const handleMenuBlur = () => {
         title="Microphone"
       >
         <component :is="isMicrophoneOn ? Mic : MicOff" class="w-5 h-5 mb-1" />
-        <span class="text-xs">Micro</span>
       </button>
       
       <!-- Camera -->
