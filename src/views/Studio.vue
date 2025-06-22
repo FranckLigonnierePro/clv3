@@ -6,10 +6,12 @@ interface CanvasElement {
   x?: number;
   y?: number;
   style?: any;
+  locked?: boolean;
 }
 
 import { ref } from "vue";
 import Canvas from "../components/studio/Canvas.vue";
+import { onMounted } from "vue";
 import LeftPanel from "../components/studio/LeftPanel.vue";
 import ChatSidebar from "../components/studio/ChatSidebar.vue";
 import { Grid2X2 } from "lucide-vue-next";
@@ -19,6 +21,8 @@ const showGrid = ref(false);
 const showChat = ref(false);
 const snapEnabled = ref(true);
 const elements = ref<CanvasElement[]>([]);
+// Ref pour accéder au canvas HTML
+const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 // Props for StudioFooter
 const scenes = ref([
@@ -33,19 +37,40 @@ const isRecording = ref(false);
 const messages = ref([]);
 
 function addTextElement() {
+  // Récupère la taille réelle du canvas
+  let canvas: HTMLCanvasElement | null = null;
+  if (canvasRef.value) {
+    // Si le composant Canvas expose le ref du vrai canvas HTML
+    canvas = canvasRef.value;
+  } else {
+    // fallback par défaut
+    canvas = { width: 1280, height: 720 } as HTMLCanvasElement;
+  }
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+
+  // Taille du texte area : 20% largeur, 10% hauteur du canvas
+  const widthRatio = 0.2;
+  const heightRatio = 0.1;
+  // Taille de police : 3% de la hauteur du canvas en px
+  const fontSizePx = 0.03 * canvasHeight;
+
   elements.value.push({
     id: Date.now().toString(),
     type: 'text',
     text: 'nouveau texte',
-    x: 100,
-    y: 100,
+    x: 0.1,
+    y: 0.1,
+    width: widthRatio,
+    height: heightRatio,
     style: {
       fontFamily: 'Arial',
-      fontSize: 24,
+      fontSize: fontSizePx / canvasHeight, // stocké en ratio (ex: 0.03)
       fill: 0xffffff,
       align: 'center',
       fontWeight: 'bold',
-    }
+    },
+    locked: false
   });
 }
 
@@ -53,13 +78,18 @@ const toggleChat = () => {
   showChat.value = !showChat.value;
 };
 
-function handleElementUpdated({ id, x, y, text }: { id: string, x?: number, y?: number, text?: string }) {
+function handleElementUpdated({ id, x, y, text, locked }: { id: string, x?: number, y?: number, text?: string, locked?: boolean }) {
   const el = elements.value.find(e => e.id === id);
   if (el) {
     if (x !== undefined) el.x = x;
     if (y !== undefined) el.y = y;
     if (text !== undefined) el.text = text;
+    if (locked !== undefined) el.locked = locked;
   }
+}
+
+function handleElementDeleted(id: string) {
+  elements.value = elements.value.filter(e => e.id !== id);
 }
 
 // --- StudioFooter Handlers ---
@@ -101,11 +131,13 @@ const toggleSnap = () => {
           </button>
           <div id="studio-canvas" class="w-full min-h-0 pb-16">
             <Canvas 
+              ref="canvasRef"
               :elements="elements"
               :showGrid="showGrid"
               :snapEnabled="snapEnabled"
               @move-element="handleMoveElement"
               @element-updated="handleElementUpdated"
+              @element-deleted="handleElementDeleted"
             />
           </div>
         </main>

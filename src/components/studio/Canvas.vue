@@ -1,5 +1,20 @@
 <script setup lang="ts">
+import { onClickOutside } from '@vueuse/core' // Pour gérer le clic hors élément
+// --- Pour gérer le clic hors de tous les overlays ---
+const canvasOverlayRef = ref<HTMLElement | null>(null)
 import { ref, onMounted, onUnmounted, nextTick, watch, defineEmits, computed } from 'vue'
+
+// Pour forcer le recalcul du style lors du resize
+const resizeTick = ref(0);
+function handleResize() {
+  resizeTick.value++;
+}
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+});
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+});
 
 // --- EMITS ---
 const emit = defineEmits(['element-updated'])
@@ -24,6 +39,10 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 // Gère quel champ est en édition (id)
 const editingId = ref<string | null>(null)
 const editingValue = ref('')
+const selectedId = ref<string | null>(null)
+
+// Pour détecter le clic hors de tous les overlays
+onClickOutside(canvasOverlayRef, () => { selectedId.value = null })
 const editingTextareaRefs = reactive<{ [id: string]: HTMLTextAreaElement | null }>({});
 const readonlyTextareaRefs = reactive<{ [id: string]: HTMLTextAreaElement | null }>({});
 function setEditingTextareaRef(id: string) {
@@ -74,14 +93,39 @@ function getCanvasScale() {
 }
 
 function inputStyle(el: any) {
+  // Force la réactivité sur resize
+  resizeTick.value;
+
+  const canvas = canvasRef.value;
+  const fontSizeRatio =
+    typeof el.style?.fontSize === 'number' && !isNaN(el.style.fontSize)
+      ? el.style.fontSize
+      : 0.03;
+  const fontSize = canvas ? fontSizeRatio * canvas.offsetHeight : 32;
+  console.log('[inputStyle]', {
+    id: el.id,
+    fontSize,
+    fontSizeRatio,
+    offsetHeight: canvas.offsetHeight,
+    offsetWidth: canvas.offsetWidth,
+    width: canvas.width,
+    height: canvas.height
+  });
+
   // Utilise le scale réel du canvas
   const { scaleX, scaleY } = getCanvasScale();
   // pos.x et pos.y sont maintenant des ratios (0..1)
   const pos = localPositions[el.id] ?? { x: el.x ?? 0, y: el.y ?? 0 };
-  const canvas = canvasRef.value;
   const px = canvas ? pos.x * canvas.width * scaleX : 0;
   const py = canvas ? pos.y * canvas.height * scaleY : 0;
-  const fontSize = (el.style?.fontSize || 24) * scaleY;
+  // Supporte width/height en ratio du canvas pour scaling proportionnel
+  // Taille minimale si width/height absents
+  const minW = 100 * scaleX;
+  const minH = 40 * scaleY;
+  let w = canvas && typeof el.width === 'number' ? el.width * canvas.width * scaleX : minW;
+  let h = canvas && typeof el.height === 'number' ? el.height * canvas.height * scaleY : minH;
+  if (!w || isNaN(w)) w = minW;
+  if (!h || isNaN(h)) h = minH;
   const lineHeight = 1.2;
   const minLineHeight = fontSize * lineHeight;
   const style: any = {
@@ -97,17 +141,21 @@ function inputStyle(el: any) {
     cursor: editingId.value || draggingId.value ? 'move' : 'pointer',
     padding: '2px 4px',
     minWidth: (120 * scaleX) + 'px',
+    width: w + 'px', // scaling proportionnel ou min
+    height: h + 'px', // scaling proportionnel ou min
+    border: '1px solid red', // debug visuel
     boxSizing: 'border-box' as const,
     userSelect: editingId.value === el.id ? 'auto' : 'none',
     pointerEvents: 'auto',
     opacity: draggingId.value === el.id ? 0.7 : 1,
     resize: 'none',
     whiteSpace: 'pre', // pas de retour auto
-    // overflowX supprimé
     overflowY: 'hidden',
     lineHeight: lineHeight,
   };
-  return style;
+  return {
+    ...style,
+  };
 }
 
 // Gestion des positions locales pour drag fluide
@@ -119,6 +167,18 @@ const localPositions = reactive<{ [id: string]: { x: number, y: number } }>({})
 watch(editingValue, () => {
   if (editingId.value && editingTextareaRefs[editingId.value]) {
     autoResizeAnyTextarea({ value: editingTextareaRefs[editingId.value] }, editingValue.value);
+    // --- Synchronise la width/height à chaque frappe ---
+    const ta = editingTextareaRefs[editingId.value];
+    const canvas = canvasRef.value;
+    if (ta && canvas) {
+      const widthRatio = ta.offsetWidth / canvas.offsetWidth;
+      const heightRatio = ta.offsetHeight / canvas.offsetHeight;
+      const el = props.elements.find(e => e.id === editingId.value);
+      if (el) {
+        // On émet la mise à jour width/height à chaque frappe
+        emit('element-updated', { id: el.id, width: widthRatio, height: heightRatio });
+      }
+    }
   }
 });
 
@@ -246,6 +306,14 @@ function onInputMouseUp() {
 
 function onBlur(el: any) {
   if (editingId.value === el.id) {
+    // --- Synchronise width/height à la sortie d'édition ---
+    const ta = editingTextareaRefs[editingId.value];
+    const canvas = canvasRef.value;
+    if (ta && canvas) {
+      const widthRatio = ta.offsetWidth / canvas.offsetWidth;
+      const heightRatio = ta.offsetHeight / canvas.offsetHeight;
+      emit('element-updated', { id: el.id, width: widthRatio, height: heightRatio });
+    }
     emit('element-updated', { id: el.id, text: editingValue.value });
     editingId.value = null;
     editingValue.value = '';
@@ -315,6 +383,8 @@ onMounted(() => {
         canvas.height = height;
         canvasSize.value = { width, height };
         drawCanvas();
+        // Force la réactivité des overlays
+        resizeTick.value++;
       }
     }
     updateCanvasSize();
@@ -343,35 +413,74 @@ onUnmounted(() => {
       class="w-full h-full block rounded-2xl"
       style="cursor: pointer;"
     ></canvas>
-    <template v-for="el in props.elements" :key="el.id">
-      <textarea
-        v-if="el.type === 'text' && editingId === el.id"
-        v-model="editingValue"
-        :ref="setEditingTextareaRef(el.id)"
-        :autofocus="true"
-        :tabindex="0"
-        :rows="1"
-        :wrap="'off'"
-        :style="inputStyle(el)"
-        @blur="onBlur(el)"
-        @keydown.ctrl.enter="onEnter(el)"
-        @mousedown.prevent="e => { if (editingId !== el.id) onInputMouseDown(e, el) }"
-        :data-el-id="el.id"
-      />
-      <textarea
-        v-else-if="el.type === 'text'"
-        :value="el.text ?? 'nouveau texte'"
-        :ref="setReadonlyTextareaRef(el.id)"
-        readonly
-        :tabindex="-1"
-        :rows="1"
-        :wrap="'off'"
-        :style="inputStyle(el)"
-        @dblclick="enableEdit(el.id)"
-        @focus="e => { const t = e.target as HTMLTextAreaElement | null; if (t && editingId !== el.id) t.blur() }"
-        @mousedown.prevent="e => { if (editingId !== el.id) onInputMouseDown(e, el) }"
-        :data-el-id="el.id"
-      />
-    </template>
+    <!-- Overlay englobant tous les overlays d'éléments -->
+    <div ref="canvasOverlayRef" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;">
+      <template v-for="el in props.elements" :key="el.id">
+        <!-- Boutons flottants, visibles SEULEMENT si sélectionné -->
+        <div
+          v-if="el.type === 'text' && selectedId === el.id"
+          :style="{
+            position: 'absolute',
+            left: inputStyle(el).left,
+            top: inputStyle(el).top,
+            transform: inputStyle(el).transform + ' translateY(-32px)',
+            zIndex: 20,
+            display: 'flex',
+            gap: '4px',
+            pointerEvents: 'auto',
+          }"
+          class="group"
+          style="pointer-events:auto;"
+        >
+          <button
+            @click="$emit('element-deleted', el.id)"
+            class="bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 group-hover:opacity-100"
+            style="font-size:14px;line-height:1;"
+            title="Supprimer"
+          >✕</button>
+          <button
+            @click="$emit('element-updated', { id: el.id, locked: !el.locked })"
+            :class="el.locked ? 'bg-yellow-400 text-zinc-900' : 'bg-zinc-700 text-white'"
+            class="hover:bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 group-hover:opacity-100"
+            style="font-size:14px;line-height:1;"
+            :title="el.locked ? 'Déverrouiller' : 'Verrouiller'"
+          >
+            <span v-if="el.locked">🔒</span>
+            <span v-else>🔓</span>
+          </button>
+        </div>
+        <textarea
+          v-if="el.type === 'text' && editingId === el.id"
+          v-model="editingValue"
+          :ref="setEditingTextareaRef(el.id)"
+          :autofocus="true"
+          :tabindex="0"
+          :rows="1"
+          :wrap="'off'"
+          :style="inputStyle(el)"
+          @blur="onBlur(el)"
+          @keydown.ctrl.enter="onEnter(el)"
+          @mousedown.prevent="e => { if (editingId !== el.id && !el.locked) onInputMouseDown(e, el) }"
+          @click.stop="selectedId = el.id"
+        />
+        <textarea
+          v-else-if="el.type === 'text'"
+          :value="el.text ?? 'nouveau texte'"
+          :ref="setReadonlyTextareaRef(el.id)"
+          readonly
+          :tabindex="-1"
+          :rows="1"
+          :wrap="'off'"
+          :style="inputStyle(el)"
+          @dblclick="enableEdit(el.id)"
+          @focus="e => { const t = e.target as HTMLTextAreaElement | null; if (t && editingId !== el.id) t.blur() }"
+          @mousedown.prevent="e => { if (editingId !== el.id && !el.locked) onInputMouseDown(e, el) }"
+          @keydown.prevent
+          :data-el-id="el.id"
+          @click.stop="selectedId = el.id"
+        />
+      </template>
+    </div>
   </div>
 </template>
+ 
