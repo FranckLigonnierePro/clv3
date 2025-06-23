@@ -8,9 +8,33 @@ import { ref, onMounted, onUnmounted, nextTick, watch, defineEmits, computed } f
 const resizeTick = ref(0);
 function handleResize() {
   resizeTick.value++;
+  nextTick(() => {
+    // Met à jour la taille de tous les textarea
+    for (const el of props.elements) {
+      const refTa = editingTextareaRefs[el.id] || readonlyTextareaRefs[el.id];
+      if (refTa) {
+        textareaSizes[el.id] = {
+          width: refTa.offsetWidth,
+          height: refTa.offsetHeight,
+        };
+      }
+    }
+  });
 }
 onMounted(() => {
   window.addEventListener('resize', handleResize);
+  // Initialiser la taille des textarea au premier montage
+  nextTick(() => {
+    for (const el of props.elements) {
+      const refTa = editingTextareaRefs[el.id] || readonlyTextareaRefs[el.id];
+      if (refTa) {
+        textareaSizes[el.id] = {
+          width: refTa.offsetWidth,
+          height: refTa.offsetHeight,
+        };
+      }
+    }
+  });
 });
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
@@ -45,6 +69,12 @@ const selectedId = ref<string | null>(null)
 onClickOutside(canvasOverlayRef, () => { selectedId.value = null })
 const editingTextareaRefs = reactive<{ [id: string]: HTMLTextAreaElement | null }>({});
 const readonlyTextareaRefs = reactive<{ [id: string]: HTMLTextAreaElement | null }>({});
+// Stocke la taille réelle de chaque textarea (pixels)
+const textareaSizes = reactive<{ [id: string]: { width: number, height: number } }>({});
+// Stocke le nombre de lignes pour chaque textarea
+const textareaLineCounts = reactive<{ [id: string]: number }>({});
+// Stocke la largeur en ratio du canvas pour chaque textarea
+const textareaWidthRatios = reactive<{ [id: string]: number }>({});
 function setEditingTextareaRef(id: string) {
   return (el: HTMLTextAreaElement | null) => { editingTextareaRefs[id] = el; };
 }
@@ -141,15 +171,28 @@ function inputStyle(el: any) {
     cursor: editingId.value || draggingId.value ? 'move' : 'pointer',
     padding: '2px 4px',
     minWidth: (120 * scaleX) + 'px',
-    width: w + 'px', // scaling proportionnel ou min
-    height: h + 'px', // scaling proportionnel ou min
+    ...((() => {
+      const canvas = canvasRef.value;
+      const widthRatio = textareaWidthRatios[el.id];
+      if (canvas && widthRatio) {
+        return {
+          width: (canvas.offsetWidth * widthRatio) + 'px',
+          height: (textareaLineCounts[el.id] ?? 1) * fontSize * lineHeight + 'px'
+        };
+      } else {
+        return {
+          width: w + 'px',
+          height: h + 'px'
+        };
+      }
+    })()),
     border: '1px solid red', // debug visuel
     boxSizing: 'border-box' as const,
     userSelect: editingId.value === el.id ? 'auto' : 'none',
     pointerEvents: 'auto',
     opacity: draggingId.value === el.id ? 0.7 : 1,
     resize: 'none',
-    whiteSpace: 'pre', // pas de retour auto
+    whiteSpace: 'normal', // retour à la ligne autorisé
     overflowY: 'hidden',
     lineHeight: lineHeight,
   };
@@ -164,21 +207,10 @@ const localPositions = reactive<{ [id: string]: { x: number, y: number } }>({})
 
 // drawElements n'est plus nécessaire, on utilise props.elements directement
 
+// Auto-resize du textarea en édition à chaque changement de texte
 watch(editingValue, () => {
   if (editingId.value && editingTextareaRefs[editingId.value]) {
-    autoResizeAnyTextarea({ value: editingTextareaRefs[editingId.value] }, editingValue.value);
-    // --- Synchronise la width/height à chaque frappe ---
-    const ta = editingTextareaRefs[editingId.value];
-    const canvas = canvasRef.value;
-    if (ta && canvas) {
-      const widthRatio = ta.offsetWidth / canvas.offsetWidth;
-      const heightRatio = ta.offsetHeight / canvas.offsetHeight;
-      const el = props.elements.find(e => e.id === editingId.value);
-      if (el) {
-        // On émet la mise à jour width/height à chaque frappe
-        emit('element-updated', { id: el.id, width: widthRatio, height: heightRatio });
-      }
-    }
+    autoResizeAnyTextarea({ value: editingTextareaRefs[editingId.value] }, editingValue.value, editingId.value);
   }
 });
 
@@ -187,7 +219,7 @@ watch(() => props.elements.map(e => e.text), () => {
   nextTick(() => {
     for (const el of props.elements) {
       if (readonlyTextareaRefs[el.id]) {
-        autoResizeAnyTextarea({ value: readonlyTextareaRefs[el.id] }, el.text ?? 'nouveau texte', el);
+        autoResizeAnyTextarea({ value: readonlyTextareaRefs[el.id] }, el.text ?? 'nouveau texte', el.id);
       }
     }
   });
@@ -211,25 +243,23 @@ function autoResizeAnyTextarea(refEl: any, value: string, el?: any) {
   nextTick(() => {
     const ta = refEl.value;
     if (ta) {
-      // Largeur dynamique
-      if (!document.getElementById('textarea-measure-span')) {
-        const span = document.createElement('span');
-        span.id = 'textarea-measure-span';
-        span.style.visibility = 'hidden';
-        span.style.position = 'fixed';
-        span.style.whiteSpace = 'pre';
-        span.style.fontFamily = ta.style.fontFamily;
-        span.style.fontSize = ta.style.fontSize;
-        document.body.appendChild(span);
-      }
-      const span = document.getElementById('textarea-measure-span')!;
-      span.textContent = value || ta.placeholder || '';
-      span.style.fontFamily = ta.style.fontFamily;
-      span.style.fontSize = ta.style.fontSize;
-      ta.style.width = (span.offsetWidth + 8) + 'px'; // padding
-      // Hauteur dynamique si retour à la ligne
       ta.style.height = 'auto';
       ta.style.height = ta.scrollHeight + 'px';
+      // Compte le nombre de lignes (split sur \n, au moins 1)
+      const lineCount = (value || '').split('\n').length;
+      textareaLineCounts[el?.id ?? el] = lineCount;
+      // Ne met à jour le ratio de largeur QUE si on est en édition
+      if (editingId.value === (el?.id ?? el)) {
+        const canvas = canvasRef.value;
+        if (canvas) {
+          textareaWidthRatios[el?.id ?? el] = ta.offsetWidth / canvas.offsetWidth;
+        }
+      }
+      // Met à jour la taille stockée pour le style (optionnel)
+      textareaSizes[el?.id ?? el] = {
+        width: ta.offsetWidth,
+        height: ta.offsetHeight,
+      };
     }
   });
 }
@@ -305,19 +335,15 @@ function onInputMouseUp() {
 }
 
 function onBlur(el: any) {
-  if (editingId.value === el.id) {
-    // --- Synchronise width/height à la sortie d'édition ---
-    const ta = editingTextareaRefs[editingId.value];
-    const canvas = canvasRef.value;
-    if (ta && canvas) {
-      const widthRatio = ta.offsetWidth / canvas.offsetWidth;
-      const heightRatio = ta.offsetHeight / canvas.offsetHeight;
-      emit('element-updated', { id: el.id, width: widthRatio, height: heightRatio });
-    }
-    emit('element-updated', { id: el.id, text: editingValue.value });
-    editingId.value = null;
-    editingValue.value = '';
+  // Sauvegarde le ratio de largeur à la fin de l'édition
+  const ta = editingTextareaRefs[el.id];
+  const canvas = canvasRef.value;
+  if (ta && canvas) {
+    textareaWidthRatios[el.id] = ta.offsetWidth / canvas.offsetWidth;
   }
+  emit('element-updated', { id: el.id, text: editingValue.value });
+  editingId.value = null;
+  editingValue.value = '';
 }
 
 function onEnter(el: any) {
@@ -329,31 +355,23 @@ function onEnter(el: any) {
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  ctx.save()
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-  ctx.lineWidth = 1
+  ctx.save();
+  ctx.fillStyle = '#a78bfa'; // violet clair
   const cols = GRID_COLS;
   const rows = GRID_ROWS;
-  // spacingX = largeur d'une cellule, spacingY = hauteur d'une cellule
   const spacingX = width / cols;
   const spacingY = height / rows;
-  // Lignes verticales (i = 0..cols inclus, donc 33 lignes pour 32 cellules)
-  for (let i = 0; i <= cols; i++) {
-    const x = Math.round(i * spacingX)
-    ctx.beginPath()
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, height)
-    ctx.stroke()
+  const radius = 2; // rayon du point
+  for (let i = 1; i < cols; i++) {
+    for (let j = 1; j < rows; j++) {
+      const x = Math.round(i * spacingX);
+      const y = Math.round(j * spacingY);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+    }
   }
-  // Lignes horizontales (j = 0..rows inclus, donc 19 lignes pour 18 cellules)
-  for (let j = 0; j <= rows; j++) {
-    const y = Math.round(j * spacingY)
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(width, y)
-    ctx.stroke()
-  }
-  ctx.restore()
+  ctx.restore();
 }
 
 function drawCanvas() {
@@ -405,7 +423,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="aspect-[16/9] max-w-full max-h-full bg-indigo-500 rounded-2xl shadow-xl relative">
+  <div ref="containerRef" class="aspect-[16/9] max-w-full max-h-full bg-black rounded-2xl shadow-xl relative">
     <canvas
       ref="canvasRef"
       :width="canvasSize.width"
@@ -456,8 +474,8 @@ onUnmounted(() => {
           :autofocus="true"
           :tabindex="0"
           :rows="1"
-          :wrap="'off'"
-          :style="inputStyle(el)"
+          :wrap="'soft'"
+          :style="{...inputStyle(el), height: (textareaSizes[el.id]?.height ?? 32) + 'px'}"
           @blur="onBlur(el)"
           @keydown.ctrl.enter="onEnter(el)"
           @mousedown.prevent="e => { if (editingId !== el.id && !el.locked) onInputMouseDown(e, el) }"
@@ -465,13 +483,13 @@ onUnmounted(() => {
         />
         <textarea
           v-else-if="el.type === 'text'"
-          :value="el.text ?? 'nouveau texte'"
+          :value="(el.text ?? 'nouveau texte').replace(/\n/g, ' ')"
           :ref="setReadonlyTextareaRef(el.id)"
           readonly
           :tabindex="-1"
           :rows="1"
-          :wrap="'off'"
-          :style="inputStyle(el)"
+          :wrap="'soft'"
+          :style="{...inputStyle(el), height: (textareaSizes[el.id]?.height ?? 32) + 'px', overflowX: 'auto', overflowY: 'hidden'}"
           @dblclick="enableEdit(el.id)"
           @focus="e => { const t = e.target as HTMLTextAreaElement | null; if (t && editingId !== el.id) t.blur() }"
           @mousedown.prevent="e => { if (editingId !== el.id && !el.locked) onInputMouseDown(e, el) }"
