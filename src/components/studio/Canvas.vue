@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import TextBlock from './TextBlock.vue'; // <-- Remplacement de StudioTextarea par TextBlock
 import ImageBlock from './ImageBlock.vue'; // <-- Import du composant ImageBlock
-import ScreenCaptureBlock from './ScreenCaptureBlock.vue'; // <-- Import du composant ScreenCaptureBlock
 import ScreenRecordBlock from './ScreenRecordBlock.vue'; // <-- Import du nouveau composant ScreenRecordBlock
 
 // --- TYPE DEFINITIONS ---
@@ -38,21 +37,6 @@ interface ImageElement {
   locked: boolean;
 }
 
-// Structure de données pour les éléments de capture d'écran
-interface ScreenCaptureElement {
-  id: string;
-  type: 'screenCapture';
-  src: string;
-  alt?: string;
-  x: number; // Position en ratio (0-1)
-  y: number;
-  width: number; // Largeur en ratio
-  height: number; // Hauteur en ratio
-  rotation: number; // en degrés
-  aspectRatio: number; // Ratio largeur/hauteur pour maintenir les proportions
-  locked: boolean;
-}
-
 // Structure de données pour les éléments d'enregistrement d'écran
 interface ScreenRecordElement {
   id: string;
@@ -67,7 +51,7 @@ interface ScreenRecordElement {
 }
 
 // Type union pour tous les éléments possibles
-type CanvasElement = TextElement | ImageElement | ScreenCaptureElement | ScreenRecordElement;
+type CanvasElement = TextElement | ImageElement | ScreenRecordElement;
 
 // État pour le glisser-déposer
 interface DragState {
@@ -274,33 +258,26 @@ function handleImageLoaded(id: string, aspectRatio: number) {
   }
 }
 
-
-// Fonction pour gérer le chargement d'une capture d'écran et mettre à jour son ratio d'aspect
-const handleCaptureLoaded = (id: string, aspectRatio: number) => {
-  // Trouver l'élément de capture d'écran correspondant
-  const elementIndex = props.elements.findIndex(el => el.id === id && el.type === 'screenCapture');
-  if (elementIndex === -1) return;
+function handleScreenRecordLoaded(id: string, aspectRatio: number) {
+  const block = props.elements.find(b => b.id === id);
+  if (!block || block.type !== 'screenRecord') return;
   
-  const element = props.elements[elementIndex] as ScreenCaptureElement;
+  // Mettre à jour le ratio d'aspect de l'image
+  block.aspectRatio = aspectRatio;
   
-  // Mettre à jour l'aspect ratio si nécessaire
-  if (element.aspectRatio !== aspectRatio) {
-    // Émettre l'événement pour mettre à jour l'élément dans le parent
+  // Ajuster la hauteur en fonction du ratio d'aspect si nécessaire
+  if (aspectRatio > 0) {
+    const newHeight = block.width / aspectRatio;
+    block.height = newHeight;
+    
+    // Émettre la mise à jour
     emit('element-updated', {
       id,
       aspectRatio,
-      // Ajuster la hauteur pour maintenir le ratio d'aspect
-      height: element.width / aspectRatio
+      height: newHeight
     });
   }
-};
-
-// Fonction pour gérer la demande de rafraîchissement d'une capture d'écran
-const handleRefreshCapture = (id: string) => {
-  // Émettre l'événement vers le composant parent (Studio.vue)
-  // pour déclencher une nouvelle capture d'écran
-  emit('refresh-capture', id);
-};
+}
 
 // --- LOGIQUE DE DÉPLACEMENT / REDIMENSIONNEMENT / ROTATION ---
 
@@ -556,7 +533,7 @@ watch(() => props.showGrid, drawCanvas);
             :canvasSize="canvasSize"
             :is-active="selectedId === el.id"
             @interaction="handleInteraction"
-            @capture-loaded="handleCaptureLoaded"
+            @screen-record-loaded="handleScreenRecordLoaded"
             @element-deleted="$emit('element-deleted', $event)"
             @element-updated="$emit('element-updated', $event)"
             :style="{ pointerEvents: 'auto' }"

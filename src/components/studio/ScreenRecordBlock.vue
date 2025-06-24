@@ -109,7 +109,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'interaction', event: MouseEvent, id: string, action: InteractionType): void;
-  (e: 'capture-loaded', id: string, aspectRatio: number): void;
+  (e: 'screen-record-loaded', id: string, aspectRatio: number): void;
   (e: 'element-deleted', id: string): void;
   (e: 'element-updated', update: { id: string, locked: boolean }): void;
 }>();
@@ -190,7 +190,7 @@ const handleVideoMetadata = () => {
   const aspectRatio = video.videoWidth / video.videoHeight;
   
   // Emit event to update aspect ratio in parent
-  emit('capture-loaded', props.block.id, aspectRatio);
+  emit('screen-record-loaded', props.block.id, aspectRatio);
   
   videoReady.value = true;
   

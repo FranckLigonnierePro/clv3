@@ -30,7 +30,6 @@ const emit = defineEmits([
   "add-image",
   "add-video",
   "add-shape",
-  "add-screen-capture",
   "add-screen-record",
   "select-element",
   "toggle-grid",
@@ -71,16 +70,6 @@ const emit = defineEmits([
           <VideoIcon class="w-5 h-5 mb-1" />
           <span class="text-xs">Vidéo</span>
         </button>
-        
-        <!-- Capture d'écran -->
-        <button
-          @click="$emit('add-screen-capture')"
-          class="w-full flex flex-col items-center justify-center p-2 text-gray-300 hover:bg-zinc-800 rounded-xl transition-colors"
-        >
-          <Monitor class="w-5 h-5 mb-1" />
-          <span class="text-xs">Capture</span>
-        </button>
-        
         <!-- Enregistrement d'écran -->
         <button
           @click="$emit('add-screen-record')"

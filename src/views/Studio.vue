@@ -32,21 +32,6 @@ interface ImageElement {
   locked?: boolean;
 }
 
-// Types for screen capture elements
-interface ScreenCaptureElement {
-  id: string;
-  type: 'screenCapture';
-  src: string;
-  alt?: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  aspectRatio: number;
-  locked?: boolean;
-}
-
 // Types for screen record elements
 interface ScreenRecordElement {
   id: string;
@@ -61,7 +46,7 @@ interface ScreenRecordElement {
 }
 
 // Union type for all canvas elements
-type CanvasElement = TextElement | ImageElement | ScreenCaptureElement | ScreenRecordElement;
+type CanvasElement = TextElement | ImageElement | ScreenRecordElement;
 
 import { ref } from "vue";
 import Canvas from "../components/studio/Canvas.vue";
@@ -161,88 +146,6 @@ function addImageElement() {
   }
 }
 
-async function addScreenCaptureElement() {
-  try {
-    // Vérifier si l'API mediaDevices est disponible
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert('La capture d\'\u00e9cran n\'est pas prise en charge par votre navigateur.');
-      return;
-    }
-    
-    // Demander à l'utilisateur de partager son écran
-    const mediaStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: false
-    });
-    
-    // Créer un élément vidéo pour capturer une image de la source
-    const video = document.createElement('video');
-    video.srcObject = mediaStream;
-    
-    // Attendre que la vidéo soit chargée
-    await new Promise(resolve => {
-      video.onloadedmetadata = () => {
-        video.play();
-        resolve(true);
-      };
-    });
-    
-    // Créer un canvas pour capturer l'image
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    // Dessiner l'image de la vidéo sur le canvas
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Impossible de créer un contexte 2D');
-    }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Convertir le canvas en image
-    const imageDataUrl = canvas.toDataURL('image/png');
-    
-    // Arrêter tous les tracks de la MediaStream
-    mediaStream.getTracks().forEach(track => track.stop());
-    
-    // Créer un élément image pour obtenir les dimensions
-    const img = new Image();
-    img.onload = () => {
-      // Calculer le ratio d'aspect
-      const aspectRatio = img.width / img.height;
-      
-      // Nous n'avons pas besoin de récupérer la taille du canvas ici
-      // car nous utilisons des ratios relatifs
-      
-      // Détermine la taille appropriée pour la capture d'écran
-      // Utilise 40% de la largeur du canvas comme largeur par défaut
-      const widthRatio = 0.4;
-      // Calcule la hauteur en fonction du ratio d'aspect
-      const heightRatio = widthRatio / aspectRatio;
-      
-      // Ajoute l'élément de capture d'écran
-      elements.value.push({
-        id: Date.now().toString(),
-        type: 'screenCapture' as const,
-        src: imageDataUrl,
-        alt: 'Capture d\'\u00e9cran',
-        x: 0.3, // Centrer horizontalement (0.5 - widthRatio/2)
-        y: 0.3, // Centrer verticalement (0.5 - heightRatio/2)
-        width: widthRatio,
-        height: heightRatio,
-        rotation: 0,
-        aspectRatio: aspectRatio,
-        locked: false
-      } as ScreenCaptureElement);
-    };
-    
-    img.src = imageDataUrl;
-  } catch (error) {
-    console.error('Erreur lors de la capture d\'\u00e9cran:', error);
-    alert('Impossible de capturer l\'\u00e9cran. Vérifiez que vous avez accordé les autorisations nécessaires.');
-  }
-}
-
 function handleImageSelected(event: Event) {
   const input = event.target as HTMLInputElement;
   if (!input.files || input.files.length === 0) return;
@@ -330,70 +233,6 @@ const toggleSnap = () => {
   snapEnabled.value = !snapEnabled.value;
 };
 
-// Fonction pour rafraîchir une capture d'écran existante
-async function refreshCaptureElement(id: string) {
-  try {
-    // Vérifier si l'API mediaDevices est disponible
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert('La capture d\'\u00e9cran n\'est pas prise en charge par votre navigateur.');
-      return;
-    }
-    
-    // Trouver l'élément de capture d'écran à mettre à jour
-    const elementIndex = elements.value.findIndex(el => el.id === id && el.type === 'screenCapture');
-    if (elementIndex === -1) return;
-    
-    // Demander à l'utilisateur de partager son écran
-    const mediaStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: false
-    });
-    
-    // Créer un élément vidéo pour capturer une image de la source
-    const video = document.createElement('video');
-    video.srcObject = mediaStream;
-    
-    // Attendre que la vidéo soit chargée
-    await new Promise(resolve => {
-      video.onloadedmetadata = () => {
-        video.play();
-        resolve(true);
-      };
-    });
-    
-    // Créer un canvas pour capturer l'image
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    // Dessiner l'image de la vidéo sur le canvas
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Impossible de créer un contexte 2D');
-    }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Convertir le canvas en image
-    const imageDataUrl = canvas.toDataURL('image/png');
-    
-    // Arrêter tous les tracks de la MediaStream
-    mediaStream.getTracks().forEach(track => track.stop());
-    
-    // Mettre à jour l'élément existant avec la nouvelle capture
-    const element = elements.value[elementIndex] as ScreenCaptureElement;
-    
-    // Mettre à jour directement l'élément dans le tableau
-    elements.value[elementIndex] = {
-      ...element,
-      src: imageDataUrl,
-      alt: 'Capture d\'\u00e9cran mise à jour'
-    };
-    
-  } catch (error) {
-    console.error('Erreur lors de la capture d\'\u00e9cran:', error);
-    alert('Impossible de capturer l\'\u00e9cran. Vérifiez que vous avez accordé les autorisations nécessaires.');
-  }
-}
 </script>
 
 <template>
@@ -417,7 +256,6 @@ async function refreshCaptureElement(id: string) {
             :show-grid="showGrid"
             @add-text="addTextElement"
             @add-image="addImageElement"
-            @add-screen-capture="addScreenCaptureElement"
             @add-screen-record="addScreenRecordElement"
             @select-element="selectedElement = $event"
             @toggle-grid="showGrid = !showGrid"
