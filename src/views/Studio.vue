@@ -14,7 +14,7 @@ interface TextElement {
   color: string;
   backgroundColor: string;
   padding: number;
-  locked?: boolean;
+  locked: boolean;
 }
 
 // Types for image elements
@@ -29,7 +29,7 @@ interface ImageElement {
   height: number;
   rotation: number;
   aspectRatio: number;
-  locked?: boolean;
+  locked: boolean;
 }
 
 // Types for screen record elements
@@ -42,11 +42,26 @@ interface ScreenRecordElement {
   height: number;
   rotation: number;
   aspectRatio: number;
-  locked?: boolean;
+  locked: boolean;
+}
+
+// Types for camera elements
+interface CameraElement {
+  id: string;
+  type: 'camera';
+  deviceId: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  aspectRatio: number;
+  locked: boolean;
 }
 
 // Union type for all canvas elements
-type CanvasElement = TextElement | ImageElement | ScreenRecordElement;
+type CanvasElement = TextElement | ImageElement | ScreenRecordElement | CameraElement;
 
 import { ref } from "vue";
 import Canvas from "../components/studio/Canvas.vue";
@@ -100,6 +115,31 @@ function addScreenRecordElement() {
     aspectRatio: aspectRatio,
     locked: false
   } as ScreenRecordElement);
+}
+
+// Fonction pour ajouter un élément caméra
+function useCameraElement(cameraInfo: { deviceId: string, label: string }) {
+  // Utilise 30% de la largeur du canvas comme largeur par défaut
+  const widthRatio = 0.3;
+  // Utilise un ratio d'aspect 4:3 par défaut pour la caméra (sera ajusté une fois le flux vidéo chargé)
+  const aspectRatio = 4/3;
+  // Calcule la hauteur en fonction du ratio d'aspect
+  const heightRatio = widthRatio / aspectRatio;
+  
+  // Ajoute l'élément caméra
+  elements.value.push({
+    id: Date.now().toString(),
+    type: 'camera' as const,
+    deviceId: cameraInfo.deviceId,
+    label: cameraInfo.label,
+    x: 0.35, // Position horizontale (0.5 - widthRatio/2)
+    y: 0.35, // Position verticale (0.5 - heightRatio/2)
+    width: widthRatio,
+    height: heightRatio,
+    rotation: 0,
+    aspectRatio: aspectRatio,
+    locked: false
+  } as CameraElement);
 }
 
 function addTextElement() {
@@ -219,6 +259,26 @@ function handleElementDeleted(id: string) {
   elements.value = elements.value.filter(e => e.id !== id);
 }
 
+// Gestion de l'aspect ratio pour les enregistrements d'écran
+function handleScreenRecordAspectRatio(id: string, aspectRatio: number) {
+  const element = elements.value.find(e => e.id === id);
+  if (!element || element.type !== 'screenRecord') return;
+  
+  // Mise à jour de l'aspect ratio et ajustement de la hauteur
+  element.aspectRatio = aspectRatio;
+  element.height = element.width / aspectRatio;
+}
+
+// Gestion de l'aspect ratio pour les caméras
+function handleCameraAspectRatio(id: string, aspectRatio: number) {
+  const element = elements.value.find(e => e.id === id);
+  if (!element || element.type !== 'camera') return;
+  
+  // Mise à jour de l'aspect ratio et ajustement de la hauteur
+  element.aspectRatio = aspectRatio;
+  element.height = element.width / aspectRatio;
+}
+
 // --- StudioFooter Handlers ---
 const toggleMicrophone = () => isMicrophoneOn.value = !isMicrophoneOn.value;
 const toggleCamera = () => isCameraOn.value = !isCameraOn.value;
@@ -257,6 +317,7 @@ const toggleSnap = () => {
             @add-text="addTextElement"
             @add-image="addImageElement"
             @add-screen-record="addScreenRecordElement"
+            @use-camera="useCameraElement"
             @select-element="selectedElement = $event"
             @toggle-grid="showGrid = !showGrid"
           />
@@ -281,7 +342,8 @@ const toggleSnap = () => {
               :snap-enabled="snapEnabled"
               @element-updated="handleElementUpdated"
               @element-deleted="handleElementDeleted"
-              @refresh-capture="refreshCaptureElement"
+              @screen-record-loaded="handleScreenRecordAspectRatio"
+              @camera-loaded="handleCameraAspectRatio"
             />
           </div>
         </main>

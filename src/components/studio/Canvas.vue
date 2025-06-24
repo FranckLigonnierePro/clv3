@@ -3,7 +3,8 @@ import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import TextBlock from './TextBlock.vue'; // <-- Remplacement de StudioTextarea par TextBlock
 import ImageBlock from './ImageBlock.vue'; // <-- Import du composant ImageBlock
-import ScreenRecordBlock from './ScreenRecordBlock.vue'; // <-- Import du nouveau composant ScreenRecordBlock
+import ScreenRecordBlock from './ScreenRecordBlock.vue'; // <-- Import du composant ScreenRecordBlock
+import CameraBlock from './CameraBlock.vue'; // <-- Import du nouveau composant CameraBlock
 
 // --- TYPE DEFINITIONS ---
 // Structure de données enrichie pour correspondre aux props de TextBlock.vue
@@ -50,8 +51,23 @@ interface ScreenRecordElement {
   locked: boolean;
 }
 
+// Structure de données pour les éléments caméra
+interface CameraElement {
+  id: string;
+  type: 'camera';
+  deviceId: string;
+  label: string;
+  x: number; // Position en ratio (0-1)
+  y: number;
+  width: number; // Largeur en ratio
+  height: number; // Hauteur en ratio
+  rotation: number; // en degrés
+  aspectRatio: number; // Ratio largeur/hauteur pour maintenir les proportions
+  locked: boolean;
+}
+
 // Type union pour tous les éléments possibles
-type CanvasElement = TextElement | ImageElement | ScreenRecordElement;
+type CanvasElement = TextElement | ImageElement | ScreenRecordElement | CameraElement;
 
 // État pour le glisser-déposer
 interface DragState {
@@ -65,9 +81,10 @@ interface DragState {
 
 // --- EMITS & PROPS ---
 const emit = defineEmits<{
-  (e: 'element-updated', changes: Partial<CanvasElement> & { id: string }): void;
+  (e: 'element-updated', update: { id: string, [key: string]: any }): void;
   (e: 'element-deleted', id: string): void;
-  (e: 'refresh-capture', id: string): void;
+  (e: 'screen-record-loaded', id: string, aspectRatio: number): void;
+  (e: 'camera-loaded', id: string, aspectRatio: number): void;
 }>();
 const props = defineProps<{
   elements: Array<CanvasElement>; // Utilise le type union pour tous les éléments
@@ -263,6 +280,27 @@ function handleScreenRecordLoaded(id: string, aspectRatio: number) {
   if (!block || block.type !== 'screenRecord') return;
   
   // Mettre à jour le ratio d'aspect de l'image
+  block.aspectRatio = aspectRatio;
+  
+  // Ajuster la hauteur en fonction du ratio d'aspect si nécessaire
+  if (aspectRatio > 0) {
+    const newHeight = block.width / aspectRatio;
+    block.height = newHeight;
+    
+    // Émettre la mise à jour
+    emit('element-updated', {
+      id,
+      aspectRatio,
+      height: newHeight
+    });
+  }
+}
+
+function handleCameraLoaded(id: string, aspectRatio: number) {
+  const block = props.elements.find(b => b.id === id);
+  if (!block || block.type !== 'camera') return;
+  
+  // Mettre à jour le ratio d'aspect de la caméra
   block.aspectRatio = aspectRatio;
   
   // Ajuster la hauteur en fonction du ratio d'aspect si nécessaire
@@ -488,7 +526,7 @@ watch(() => props.showGrid, drawCanvas);
       :height="canvasSize.height"
       class="w-full h-full block rounded-2xl"
     ></canvas>
-    
+    {{ props.elements }}
     <!-- L'overlay capture les clics "à l'extérieur" -->
     <div 
       ref="canvasOverlayRef" 
@@ -534,6 +572,20 @@ watch(() => props.showGrid, drawCanvas);
             :is-active="selectedId === el.id"
             @interaction="handleInteraction"
             @screen-record-loaded="handleScreenRecordLoaded"
+            @element-deleted="$emit('element-deleted', $event)"
+            @element-updated="$emit('element-updated', $event)"
+            :style="{ pointerEvents: 'auto' }"
+          />
+        </div>
+        
+        <!-- Élément de type caméra -->
+        <div v-else-if="el.type === 'camera'">
+          <CameraBlock
+            :block="el"
+            :canvasSize="canvasSize"
+            :is-active="selectedId === el.id"
+            @interaction="handleInteraction"
+            @camera-loaded="handleCameraLoaded"
             @element-deleted="$emit('element-deleted', $event)"
             @element-updated="$emit('element-updated', $event)"
             :style="{ pointerEvents: 'auto' }"
