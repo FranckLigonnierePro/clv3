@@ -2,7 +2,9 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import TextBlock from './TextBlock.vue'; // <-- Remplacement de StudioTextarea par TextBlock
-import ImageBlock from './ImageBlock.vue'; // <-- Import du nouveau composant ImageBlock
+import ImageBlock from './ImageBlock.vue'; // <-- Import du composant ImageBlock
+import ScreenCaptureBlock from './ScreenCaptureBlock.vue'; // <-- Import du composant ScreenCaptureBlock
+import ScreenRecordBlock from './ScreenRecordBlock.vue'; // <-- Import du nouveau composant ScreenRecordBlock
 
 // --- TYPE DEFINITIONS ---
 // Structure de données enrichie pour correspondre aux props de TextBlock.vue
@@ -17,7 +19,7 @@ interface TextElement {
   rotation: number; // en degrés
   fontSize: number; // Taille de police de base
   isEditing?: boolean; // Indique si le bloc est en mode édition
-  locked?: boolean;
+  locked: boolean;
   style?: any; // Gardé pour compatibilité éventuelle
 }
 
@@ -33,11 +35,39 @@ interface ImageElement {
   height: number; // Hauteur en ratio
   rotation: number; // en degrés
   aspectRatio: number; // Ratio largeur/hauteur pour maintenir les proportions
-  locked?: boolean;
+  locked: boolean;
+}
+
+// Structure de données pour les éléments de capture d'écran
+interface ScreenCaptureElement {
+  id: string;
+  type: 'screenCapture';
+  src: string;
+  alt?: string;
+  x: number; // Position en ratio (0-1)
+  y: number;
+  width: number; // Largeur en ratio
+  height: number; // Hauteur en ratio
+  rotation: number; // en degrés
+  aspectRatio: number; // Ratio largeur/hauteur pour maintenir les proportions
+  locked: boolean;
+}
+
+// Structure de données pour les éléments d'enregistrement d'écran
+interface ScreenRecordElement {
+  id: string;
+  type: 'screenRecord';
+  x: number; // Position en ratio (0-1)
+  y: number;
+  width: number; // Largeur en ratio
+  height: number; // Hauteur en ratio
+  rotation: number; // en degrés
+  aspectRatio: number; // Ratio largeur/hauteur pour maintenir les proportions
+  locked: boolean;
 }
 
 // Type union pour tous les éléments possibles
-type CanvasElement = TextElement | ImageElement;
+type CanvasElement = TextElement | ImageElement | ScreenCaptureElement | ScreenRecordElement;
 
 // État pour le glisser-déposer
 interface DragState {
@@ -50,7 +80,11 @@ interface DragState {
 }
 
 // --- EMITS & PROPS ---
-const emit = defineEmits(['element-updated', 'element-deleted']);
+const emit = defineEmits<{
+  (e: 'element-updated', changes: Partial<CanvasElement> & { id: string }): void;
+  (e: 'element-deleted', id: string): void;
+  (e: 'refresh-capture', id: string): void;
+}>();
 const props = defineProps<{
   elements: Array<CanvasElement>; // Utilise le type union pour tous les éléments
   showGrid: boolean;
@@ -241,6 +275,33 @@ function handleImageLoaded(id: string, aspectRatio: number) {
 }
 
 
+// Fonction pour gérer le chargement d'une capture d'écran et mettre à jour son ratio d'aspect
+const handleCaptureLoaded = (id: string, aspectRatio: number) => {
+  // Trouver l'élément de capture d'écran correspondant
+  const elementIndex = props.elements.findIndex(el => el.id === id && el.type === 'screenCapture');
+  if (elementIndex === -1) return;
+  
+  const element = props.elements[elementIndex] as ScreenCaptureElement;
+  
+  // Mettre à jour l'aspect ratio si nécessaire
+  if (element.aspectRatio !== aspectRatio) {
+    // Émettre l'événement pour mettre à jour l'élément dans le parent
+    emit('element-updated', {
+      id,
+      aspectRatio,
+      // Ajuster la hauteur pour maintenir le ratio d'aspect
+      height: element.width / aspectRatio
+    });
+  }
+};
+
+// Fonction pour gérer la demande de rafraîchissement d'une capture d'écran
+const handleRefreshCapture = (id: string) => {
+  // Émettre l'événement vers le composant parent (Studio.vue)
+  // pour déclencher une nouvelle capture d'écran
+  emit('refresh-capture', id);
+};
+
 // --- LOGIQUE DE DÉPLACEMENT / REDIMENSIONNEMENT / ROTATION ---
 
 function handleMouseMove(e: MouseEvent) {
@@ -405,22 +466,7 @@ function drawCanvas() {
   if (props.showGrid) drawGrid(ctx, canvas.width, canvas.height);
 }
 
-// Style calculé pour les boutons flottants
-const floatingButtonsStyle = (el: CanvasElement) => {
-  const x = ratioToPixels(el.x, 'width');
-  const y = ratioToPixels(el.y, 'height');
-  return {
-    position: 'absolute' as const,
-    left: `${x}px`,
-    top: `${y}px`,
-    // Positionne les boutons au-dessus du coin supérieur gauche du bloc
-    transform: `translateY(-32px)`,
-    zIndex: 20,
-    display: 'flex',
-    gap: '4px',
-    pointerEvents: 'auto' as const,
-  };
-};
+
 
 let resizeObserver: ResizeObserver | null = null;
 onMounted(() => {
@@ -473,28 +519,6 @@ watch(() => props.showGrid, drawCanvas);
       :style="{ pointerEvents: 'none' }"
     >
       <template v-for="el in props.elements" :key="el.id">
-        <!-- Boutons flottants communs à tous les types d'éléments -->
-        <div
-          v-if="selectedId === el.id && (el.type !== 'text' || editingId !== el.id)"
-          :style="floatingButtonsStyle(el)"
-        >
-          <button
-            @click="$emit('element-deleted', el.id)"
-            class="bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
-            title="Supprimer"
-            :style="{ pointerEvents: 'auto' }"
-          >✕</button>
-          <button
-            @click="$emit('element-updated', { id: el.id, locked: !el.locked })"
-            :class="el.locked ? 'bg-yellow-400 text-zinc-900' : 'bg-zinc-700 text-white'"
-            class="hover:bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
-            :title="el.locked ? 'Déverrouiller' : 'Verrouiller'"
-            :style="{ pointerEvents: 'auto' }"
-          >
-            <span v-if="el.locked">🔒</span>
-            <span v-else>🔓</span>
-          </button>
-        </div>
         
         <!-- Élément de type texte -->
         <div v-if="el.type === 'text'">
@@ -506,6 +530,8 @@ watch(() => props.showGrid, drawCanvas);
             @interaction="handleInteraction"
             @text-change="handleTextChange"
             @text-blur="handleTextBlur"
+            @element-deleted="$emit('element-deleted', $event)"
+            @element-updated="$emit('element-updated', $event)"
             :style="{ pointerEvents: 'auto' }"
           />
         </div>
@@ -518,6 +544,21 @@ watch(() => props.showGrid, drawCanvas);
             :is-active="selectedId === el.id"
             @interaction="handleInteraction"
             @image-loaded="handleImageLoaded"
+            @element-deleted="$emit('element-deleted', $event)"
+            @element-updated="$emit('element-updated', $event)"
+            :style="{ pointerEvents: 'auto' }"
+          />
+        </div>
+        <!-- Élément de type enregistrement d'écran -->
+        <div v-else-if="el.type === 'screenRecord'">
+          <ScreenRecordBlock
+            :block="el"
+            :canvasSize="canvasSize"
+            :is-active="selectedId === el.id"
+            @interaction="handleInteraction"
+            @capture-loaded="handleCaptureLoaded"
+            @element-deleted="$emit('element-deleted', $event)"
+            @element-updated="$emit('element-updated', $event)"
             :style="{ pointerEvents: 'auto' }"
           />
         </div>

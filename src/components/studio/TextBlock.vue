@@ -51,6 +51,24 @@
       >
         <RotateCw class="w-3 h-3 text-white" />
       </div>
+      
+      <!-- Boutons de suppression et verrouillage -->
+      <div class="absolute -top-8 -left-1 flex gap-1">
+        <button
+          @click.stop="emit('element-deleted', block.id)"
+          class="bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
+          title="Supprimer"
+        >✕</button>
+        <button
+          @click.stop="emit('element-updated', { id: block.id, locked: !block.locked })"
+          :class="block.locked ? 'bg-yellow-400 text-zinc-900' : 'bg-zinc-700 text-white'"
+          class="hover:bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
+          :title="block.locked ? 'Déverrouiller' : 'Verrouiller'"
+        >
+          <span v-if="block.locked">🔒</span>
+          <span v-else>🔓</span>
+        </button>
+      </div>
     </template>
   </div>
 </template>
@@ -70,6 +88,7 @@ interface TextBlockData {
   rotation: number;
   isEditing: boolean;
   fontSize: number;
+  locked: boolean;
 }
 
 interface CanvasSize {
@@ -92,6 +111,8 @@ const emit = defineEmits<{
   (e: 'interaction', event: MouseEvent, id: number, action: InteractionType): void;
   (e: 'textChange', id: number, newText: string): void;
   (e: 'textBlur', id: number): void;
+  (e: 'element-deleted', id: number): void;
+  (e: 'element-updated', update: { id: number, locked: boolean }): void;
 }>();
 
 // --- REFS ---

@@ -54,6 +54,24 @@
       >
         <RotateCw class="w-3 h-3 text-white" />
       </div>
+      
+      <!-- Boutons de suppression et verrouillage -->
+      <div class="absolute flex gap-1" style="top: -32px; left: 0;">
+        <button
+          @click.stop="emit('element-deleted', block.id)"
+          class="bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
+          title="Supprimer"
+        >✕</button>
+        <button
+          @click.stop="emit('element-updated', { id: block.id, locked: !block.locked })"
+          :class="block.locked ? 'bg-yellow-400 text-zinc-900' : 'bg-zinc-700 text-white'"
+          class="hover:bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
+          :title="block.locked ? 'Déverrouiller' : 'Verrouiller'"
+        >
+          <span v-if="block.locked">🔒</span>
+          <span v-else>🔓</span>
+        </button>
+      </div>
     </template>
   </div>
 </template>
@@ -73,8 +91,8 @@ interface ImageBlockData {
   width: number;
   height: number;
   rotation: number;
-  aspectRatio: number;
-  locked?: boolean;
+  aspectRatio?: number;
+  locked: boolean;
 }
 
 interface CanvasSize {
@@ -95,6 +113,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'interaction', event: MouseEvent, id: string, action: InteractionType): void;
   (e: 'imageLoaded', id: string, aspectRatio: number): void;
+  (e: 'element-deleted', id: string): void;
+  (e: 'element-updated', update: { id: string, locked: boolean }): void;
 }>();
 
 // --- REFS ---

@@ -10,8 +10,10 @@ interface TextElement {
   height: number;
   rotation: number;
   fontSize: number;
-  isEditing?: boolean;
-  style?: any;
+  fontFamily: string;
+  color: string;
+  backgroundColor: string;
+  padding: number;
   locked?: boolean;
 }
 
@@ -30,12 +32,39 @@ interface ImageElement {
   locked?: boolean;
 }
 
+// Types for screen capture elements
+interface ScreenCaptureElement {
+  id: string;
+  type: 'screenCapture';
+  src: string;
+  alt?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  aspectRatio: number;
+  locked?: boolean;
+}
+
+// Types for screen record elements
+interface ScreenRecordElement {
+  id: string;
+  type: 'screenRecord';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  aspectRatio: number;
+  locked?: boolean;
+}
+
 // Union type for all canvas elements
-type CanvasElement = TextElement | ImageElement;
+type CanvasElement = TextElement | ImageElement | ScreenCaptureElement | ScreenRecordElement;
 
 import { ref } from "vue";
 import Canvas from "../components/studio/Canvas.vue";
-import { onMounted } from "vue";
 import LeftPanel from "../components/studio/LeftPanel.vue";
 import ChatSidebar from "../components/studio/ChatSidebar.vue";
 import { Grid2X2 } from "lucide-vue-next";
@@ -47,6 +76,7 @@ const snapEnabled = ref(true);
 const elements = ref<CanvasElement[]>([]);
 // Ref pour accéder au canvas HTML
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+const selectedElement = ref<string | null>(null);
 
 // Props for StudioFooter
 const scenes = ref([
@@ -60,6 +90,33 @@ const isLive = ref(false);
 const isRecording = ref(false);
 const messages = ref([]);
 
+// Fonction pour ajouter un élément d'enregistrement d'écran
+function addScreenRecordElement() {
+  // Récupère la taille réelle du canvas pour les calculs de ratio
+  // Nous n'avons pas besoin de récupérer le canvas ici
+  // car nous utilisons des ratios relatifs pour le positionnement
+  
+  // Utilise 40% de la largeur du canvas comme largeur par défaut
+  const widthRatio = 0.4;
+  // Utilise un ratio d'aspect 16:9 par défaut pour la vidéo
+  const aspectRatio = 16/9;
+  // Calcule la hauteur en fonction du ratio d'aspect
+  const heightRatio = widthRatio / aspectRatio;
+  
+  // Ajoute l'élément d'enregistrement d'écran
+  elements.value.push({
+    id: Date.now().toString(),
+    type: 'screenRecord' as const,
+    x: 0.3, // Position horizontale (0.5 - widthRatio/2)
+    y: 0.3, // Position verticale (0.5 - heightRatio/2)
+    width: widthRatio,
+    height: heightRatio,
+    rotation: 0,
+    aspectRatio: aspectRatio,
+    locked: false
+  } as ScreenRecordElement);
+}
+
 function addTextElement() {
   // Récupère la taille réelle du canvas
   let canvas: HTMLCanvasElement | null = null;
@@ -70,7 +127,6 @@ function addTextElement() {
     // fallback par défaut
     canvas = { width: 1280, height: 720 } as HTMLCanvasElement;
   }
-  const canvasWidth = canvas.width;
   const canvasHeight = canvas.height;
 
   // Taille du texte area : 20% largeur, 10% hauteur du canvas
@@ -87,12 +143,10 @@ function addTextElement() {
     height: 0.1,
     rotation: 0,
     fontSize: fontSizePx / canvasHeight, // stocké en ratio (ex: 0.03)
-    style: {
-      fontFamily: 'Arial',
-      fill: 0xffffff,
-      align: 'center',
-      fontWeight: 'bold',
-    },
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    backgroundColor: 'transparent',
+    padding: 0,
     locked: false
   } as TextElement);
 }
@@ -101,67 +155,143 @@ function addTextElement() {
 const fileInputRef = ref<HTMLInputElement | null>(null);
 
 function addImageElement() {
-  // Ouvrir le sélecteur de fichier
+  // Ouvre le sélecteur de fichier
   if (fileInputRef.value) {
     fileInputRef.value.click();
+  }
+}
+
+async function addScreenCaptureElement() {
+  try {
+    // Vérifier si l'API mediaDevices est disponible
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      alert('La capture d\'\u00e9cran n\'est pas prise en charge par votre navigateur.');
+      return;
+    }
+    
+    // Demander à l'utilisateur de partager son écran
+    const mediaStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false
+    });
+    
+    // Créer un élément vidéo pour capturer une image de la source
+    const video = document.createElement('video');
+    video.srcObject = mediaStream;
+    
+    // Attendre que la vidéo soit chargée
+    await new Promise(resolve => {
+      video.onloadedmetadata = () => {
+        video.play();
+        resolve(true);
+      };
+    });
+    
+    // Créer un canvas pour capturer l'image
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Dessiner l'image de la vidéo sur le canvas
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Impossible de créer un contexte 2D');
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convertir le canvas en image
+    const imageDataUrl = canvas.toDataURL('image/png');
+    
+    // Arrêter tous les tracks de la MediaStream
+    mediaStream.getTracks().forEach(track => track.stop());
+    
+    // Créer un élément image pour obtenir les dimensions
+    const img = new Image();
+    img.onload = () => {
+      // Calculer le ratio d'aspect
+      const aspectRatio = img.width / img.height;
+      
+      // Nous n'avons pas besoin de récupérer la taille du canvas ici
+      // car nous utilisons des ratios relatifs
+      
+      // Détermine la taille appropriée pour la capture d'écran
+      // Utilise 40% de la largeur du canvas comme largeur par défaut
+      const widthRatio = 0.4;
+      // Calcule la hauteur en fonction du ratio d'aspect
+      const heightRatio = widthRatio / aspectRatio;
+      
+      // Ajoute l'élément de capture d'écran
+      elements.value.push({
+        id: Date.now().toString(),
+        type: 'screenCapture' as const,
+        src: imageDataUrl,
+        alt: 'Capture d\'\u00e9cran',
+        x: 0.3, // Centrer horizontalement (0.5 - widthRatio/2)
+        y: 0.3, // Centrer verticalement (0.5 - heightRatio/2)
+        width: widthRatio,
+        height: heightRatio,
+        rotation: 0,
+        aspectRatio: aspectRatio,
+        locked: false
+      } as ScreenCaptureElement);
+    };
+    
+    img.src = imageDataUrl;
+  } catch (error) {
+    console.error('Erreur lors de la capture d\'\u00e9cran:', error);
+    alert('Impossible de capturer l\'\u00e9cran. Vérifiez que vous avez accordé les autorisations nécessaires.');
   }
 }
 
 function handleImageSelected(event: Event) {
   const input = event.target as HTMLInputElement;
   if (!input.files || input.files.length === 0) return;
-  
+
   const file = input.files[0];
-  if (!file.type.startsWith('image/')) {
-    alert('Veuillez sélectionner une image valide');
-    return;
-  }
-  
-  // Récupère la taille réelle du canvas
-  let canvas: HTMLCanvasElement | null = null;
-  if (canvasRef.value) {
-    // Si le composant Canvas expose le ref du vrai canvas HTML
-    canvas = canvasRef.value;
-  } else {
-    // fallback par défaut
-    canvas = { width: 1280, height: 720 } as HTMLCanvasElement;
-  }
-  
-  // Taille de l'image : 30% largeur, 30% hauteur du canvas
-  const widthRatio = 0.3;
-  
-  // Créer une URL pour l'image sélectionnée
-  const imageUrl = URL.createObjectURL(file);
-  
-  // Créer un élément Image pour obtenir les dimensions réelles
-  const img = new Image();
-  img.onload = () => {
-    // Calculer le ratio d'aspect réel de l'image
-    const aspectRatio = img.width / img.height;
-    
-    // Ajouter l'élément image au canvas
-    elements.value.push({
-      id: Date.now().toString(),
-      type: 'image' as const,
-      src: imageUrl,
-      alt: file.name,
-      x: 0.35, // Centré horizontalement
-      y: 0.35, // Centré verticalement
-      width: widthRatio,
-      height: widthRatio / aspectRatio, // Ajuster la hauteur en fonction du ratio d'aspect
-      rotation: 0,
-      aspectRatio: aspectRatio,
-      locked: false
-    } as ImageElement);
-    
-    // Réinitialiser l'input file pour permettre de sélectionner la même image à nouveau
-    if (fileInputRef.value) {
-      fileInputRef.value.value = '';
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    if (!e.target || !e.target.result || typeof e.target.result !== 'string') return;
+
+    // Créer un élément image pour obtenir les dimensions
+    const img = new Image();
+    img.onload = () => {
+      // Calculer le ratio d'aspect
+      const aspectRatio = img.width / img.height;
+
+      // Nous n'avons pas besoin de récupérer la taille du canvas ici
+      // car nous utilisons des ratios relatifs
+
+      // Détermine la taille appropriée pour l'image
+      // Utilise 30% de la largeur du canvas comme largeur par défaut
+      const widthRatio = 0.3;
+      // Calcule la hauteur en fonction du ratio d'aspect
+      const heightRatio = widthRatio / aspectRatio;
+
+      // Ajoute l'élément image
+      elements.value.push({
+        id: Date.now().toString(),
+        type: 'image' as const,
+        src: e.target?.result as string,
+        alt: file.name,
+        x: 0.35, // Centrer horizontalement (0.5 - widthRatio/2)
+        y: 0.35, // Centrer verticalement (0.5 - heightRatio/2)
+        width: widthRatio,
+        height: heightRatio,
+        rotation: 0,
+        aspectRatio: aspectRatio,
+        locked: false
+      } as ImageElement);
+
+      // Réinitialiser l'input pour permettre de sélectionner le même fichier
+      if (input) input.value = '';
+    };
+    if (e.target && e.target.result) {
+      img.src = e.target.result as string;
     }
   };
-  
-  // Déclencher le chargement de l'image
-  img.src = imageUrl;
+
+  reader.readAsDataURL(file);
 }
 
 const toggleChat = () => {
@@ -199,26 +329,99 @@ const changeScene = (sceneId: number) => {
 const toggleSnap = () => {
   snapEnabled.value = !snapEnabled.value;
 };
+
+// Fonction pour rafraîchir une capture d'écran existante
+async function refreshCaptureElement(id: string) {
+  try {
+    // Vérifier si l'API mediaDevices est disponible
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      alert('La capture d\'\u00e9cran n\'est pas prise en charge par votre navigateur.');
+      return;
+    }
+    
+    // Trouver l'élément de capture d'écran à mettre à jour
+    const elementIndex = elements.value.findIndex(el => el.id === id && el.type === 'screenCapture');
+    if (elementIndex === -1) return;
+    
+    // Demander à l'utilisateur de partager son écran
+    const mediaStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false
+    });
+    
+    // Créer un élément vidéo pour capturer une image de la source
+    const video = document.createElement('video');
+    video.srcObject = mediaStream;
+    
+    // Attendre que la vidéo soit chargée
+    await new Promise(resolve => {
+      video.onloadedmetadata = () => {
+        video.play();
+        resolve(true);
+      };
+    });
+    
+    // Créer un canvas pour capturer l'image
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Dessiner l'image de la vidéo sur le canvas
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Impossible de créer un contexte 2D');
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convertir le canvas en image
+    const imageDataUrl = canvas.toDataURL('image/png');
+    
+    // Arrêter tous les tracks de la MediaStream
+    mediaStream.getTracks().forEach(track => track.stop());
+    
+    // Mettre à jour l'élément existant avec la nouvelle capture
+    const element = elements.value[elementIndex] as ScreenCaptureElement;
+    
+    // Mettre à jour directement l'élément dans le tableau
+    elements.value[elementIndex] = {
+      ...element,
+      src: imageDataUrl,
+      alt: 'Capture d\'\u00e9cran mise à jour'
+    };
+    
+  } catch (error) {
+    console.error('Erreur lors de la capture d\'\u00e9cran:', error);
+    alert('Impossible de capturer l\'\u00e9cran. Vérifiez que vous avez accordé les autorisations nécessaires.');
+  }
+}
 </script>
 
 <template>
   <div class="h-screen bg-zinc-900">
     <!-- Input file caché pour la sélection d'images -->
     <input
-      ref="fileInputRef"
       type="file"
+      ref="fileInputRef"
+      @change="handleImageSelected"
       accept="image/*"
       class="hidden"
-      @change="handleImageSelected"
     />
+    <!-- Nous n'avons plus besoin de l'input file pour les captures d'écran car nous utilisons l'API MediaDevices -->
     <div class="flex h-full overflow-hidden pb-16">
       <aside class="w-24 bg-zinc-900 text-white flex-shrink-0">
         <div>
-          <LeftPanel 
+          <LeftPanel
+            :show-panel="true"
             :elements="elements"
+            :selected-element="selectedElement || undefined"
+            :show-grid="showGrid"
             @add-text="addTextElement"
             @add-image="addImageElement"
-            />
+            @add-screen-capture="addScreenCaptureElement"
+            @add-screen-record="addScreenRecordElement"
+            @select-element="selectedElement = $event"
+            @toggle-grid="showGrid = !showGrid"
+          />
         </div>
       </aside>
       <div class="flex flex-1">
@@ -236,10 +439,11 @@ const toggleSnap = () => {
             <Canvas 
               ref="canvasRef"
               :elements="elements"
-              :showGrid="showGrid"
-              :snapEnabled="snapEnabled"
+              :show-grid="showGrid"
+              :snap-enabled="snapEnabled"
               @element-updated="handleElementUpdated"
               @element-deleted="handleElementDeleted"
+              @refresh-capture="refreshCaptureElement"
             />
           </div>
         </main>
