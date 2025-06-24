@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch, reactive, computed } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import TextBlock from './TextBlock.vue'; // <-- Remplacement de StudioTextarea par TextBlock
+import ImageBlock from './ImageBlock.vue'; // <-- Import du nouveau composant ImageBlock
 
 // --- TYPE DEFINITIONS ---
 // Structure de données enrichie pour correspondre aux props de TextBlock.vue
@@ -20,20 +21,38 @@ interface TextElement {
   style?: any; // Gardé pour compatibilité éventuelle
 }
 
+// Structure de données pour les éléments image
+interface ImageElement {
+  id: string;
+  type: 'image';
+  src: string;
+  alt?: string;
+  x: number; // Position en ratio (0-1)
+  y: number;
+  width: number; // Largeur en ratio
+  height: number; // Hauteur en ratio
+  rotation: number; // en degrés
+  aspectRatio: number; // Ratio largeur/hauteur pour maintenir les proportions
+  locked?: boolean;
+}
+
+// Type union pour tous les éléments possibles
+type CanvasElement = TextElement | ImageElement;
+
 // État pour le glisser-déposer
 interface DragState {
   blockId: string;
   action: 'move' | 'resize-se' | 'resize-sw' | 'resize-ne' | 'resize-nw' | 'rotate';
   startX: number;
   startY: number;
-  initialBlock: TextElement; // Stocke l'état initial du bloc
+  initialBlock: CanvasElement; // Stocke l'état initial du bloc
   canvasRect: DOMRect;
 }
 
 // --- EMITS & PROPS ---
 const emit = defineEmits(['element-updated', 'element-deleted']);
 const props = defineProps<{
-  elements: Array<TextElement>; // Utilise la nouvelle interface
+  elements: Array<CanvasElement>; // Utilise le type union pour tous les éléments
   showGrid: boolean;
   snapEnabled?: boolean;
 }>();
@@ -110,7 +129,7 @@ const EDIT_FONT_SIZE = 16;
 // Fonction pour ajuster automatiquement la taille du bloc au texte
 function adjustBlockToText(id: string, isEditing = false) {
     const block = props.elements.find(b => b.id === id);
-    if (!block) return;
+    if (!block || block.type !== 'text') return;
     
     // Calculer la taille de police en fonction de la hauteur du bloc
     const blockHeightPx = ratioToPixels(block.height, 'height');
@@ -169,7 +188,7 @@ function adjustBlockToText(id: string, isEditing = false) {
 
 function handleTextChange(id: string, newText: string) {
     const block = props.elements.find(b => b.id === id);
-    if (!block) return;
+    if (!block || block.type !== 'text') return;
 
     // Mettre à jour le texte
     block.text = newText;
@@ -190,12 +209,34 @@ function handleTextBlur(id: string) {
   }
   
   const block = props.elements.find(b => b.id === id);
-  if (block) {
+  if (block && block.type === 'text') {
     block.isEditing = false;
     
     // Ajuster la taille du bloc au texte lorsqu'on quitte le mode édition
     // Utiliser false pour indiquer qu'on n'est plus en mode édition
     adjustBlockToText(id, false);
+  }
+}
+
+// Fonction pour gérer le chargement d'une image et mettre à jour son ratio d'aspect
+function handleImageLoaded(id: string, aspectRatio: number) {
+  const block = props.elements.find(b => b.id === id);
+  if (!block || block.type !== 'image') return;
+  
+  // Mettre à jour le ratio d'aspect de l'image
+  block.aspectRatio = aspectRatio;
+  
+  // Ajuster la hauteur en fonction du ratio d'aspect si nécessaire
+  if (aspectRatio > 0) {
+    const newHeight = block.width / aspectRatio;
+    block.height = newHeight;
+    
+    // Émettre la mise à jour
+    emit('element-updated', {
+      id,
+      aspectRatio,
+      height: newHeight
+    });
   }
 }
 
@@ -212,7 +253,7 @@ function handleMouseMove(e: MouseEvent) {
   const currentBlock = props.elements.find(b => b.id === blockId);
   if (!currentBlock) return;
 
-  let changes: Partial<TextElement> = {};
+  let changes: Partial<CanvasElement> = {};
 
   switch (action) {
     case 'move': {
@@ -240,27 +281,63 @@ function handleMouseMove(e: MouseEvent) {
       const deltaRatioX = pixelsToRatio(deltaX, 'width');
       const deltaRatioY = pixelsToRatio(deltaY, 'height');
       
-      const scaleFactor = Math.max(
+      // Gestion spéciale pour les images (maintien du ratio)
+      if (currentBlock.type === 'image' && 'aspectRatio' in currentBlock) {
+        const aspectRatio = currentBlock.aspectRatio;
+        
+        // Calculer le changement de taille en fonction de la direction de redimensionnement
+        let newWidth, newHeight;
+        
+        // Déterminer quelle dimension contrôle le redimensionnement
+        if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+          // Redimensionnement horizontal dominant
+          newWidth = initialBlock.width + (action.includes('e') ? deltaRatioX : -deltaRatioX);
+          newHeight = newWidth / aspectRatio;
+        } else {
+          // Redimensionnement vertical dominant
+          newHeight = initialBlock.height + (action.includes('s') ? deltaRatioY : -deltaRatioY);
+          newWidth = newHeight * aspectRatio;
+        }
+        
+        let newX = initialBlock.x;
+        let newY = initialBlock.y;
+        
+        if (action.includes('w')) { newX = initialBlock.x + initialBlock.width - newWidth; }
+        if (action.includes('n')) { newY = initialBlock.y + initialBlock.height - newHeight; }
+        
+        // Taille minimale pour les images
+        if (newWidth >= 0.05 && newHeight >= 0.02) {
+          changes = {
+            x: newX,
+            y: newY,
+            width: newWidth,
+            height: newHeight,
+          };
+        }
+      } else {
+        // Comportement standard pour les éléments texte
+        const scaleFactor = Math.max(
           (initialBlock.width + (action.includes('e') ? deltaRatioX : -deltaRatioX)) / initialBlock.width,
           (initialBlock.height + (action.includes('s') ? deltaRatioY : -deltaRatioY)) / initialBlock.height
-      );
+        );
 
-      const scaledWidth = initialBlock.width * scaleFactor;
-      const scaledHeight = initialBlock.height * scaleFactor;
-      
-      let newX = initialBlock.x;
-      let newY = initialBlock.y;
+        const scaledWidth = initialBlock.width * scaleFactor;
+        const scaledHeight = initialBlock.height * scaleFactor;
+        
+        let newX = initialBlock.x;
+        let newY = initialBlock.y;
 
-      if (action.includes('w')) { newX = initialBlock.x + initialBlock.width - scaledWidth; }
-      if (action.includes('n')) { newY = initialBlock.y + initialBlock.height - scaledHeight; }
-      
-      if (scaledWidth >= 0.05 && scaledHeight >= 0.02) {
+        if (action.includes('w')) { newX = initialBlock.x + initialBlock.width - scaledWidth; }
+        if (action.includes('n')) { newY = initialBlock.y + initialBlock.height - scaledHeight; }
+        
+        if (scaledWidth >= 0.05 && scaledHeight >= 0.02) {
           changes = {
-              x: newX,
-              y: newY,
-              width: scaledWidth,
-              height: scaledHeight,
+            x: newX,
+            y: newY,
+            width: scaledWidth,
+            height: scaledHeight,
           };
+        }
       }
       break;
     }
@@ -329,11 +406,11 @@ function drawCanvas() {
 }
 
 // Style calculé pour les boutons flottants
-const floatingButtonsStyle = (el: TextElement) => {
+const floatingButtonsStyle = (el: CanvasElement) => {
   const x = ratioToPixels(el.x, 'width');
   const y = ratioToPixels(el.y, 'height');
   return {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: `${x}px`,
     top: `${y}px`,
     // Positionne les boutons au-dessus du coin supérieur gauche du bloc
@@ -341,7 +418,7 @@ const floatingButtonsStyle = (el: TextElement) => {
     zIndex: 20,
     display: 'flex',
     gap: '4px',
-    pointerEvents: 'auto',
+    pointerEvents: 'auto' as const,
   };
 };
 
@@ -393,35 +470,34 @@ watch(() => props.showGrid, drawCanvas);
     <div 
       ref="canvasOverlayRef" 
       class="absolute top-0 left-0 w-full h-full"
-      style="pointer-events: none;"
+      :style="{ pointerEvents: 'none' }"
     >
       <template v-for="el in props.elements" :key="el.id">
-        <div v-if="el.type === 'text'">
-          
-          <!-- Boutons flottants, visibles si l'élément est sélectionné et non en édition -->
-          <div
-            v-if="selectedId === el.id && editingId !== el.id"
-            :style="floatingButtonsStyle(el)"
+        <!-- Boutons flottants communs à tous les types d'éléments -->
+        <div
+          v-if="selectedId === el.id && (el.type !== 'text' || editingId !== el.id)"
+          :style="floatingButtonsStyle(el)"
+        >
+          <button
+            @click="$emit('element-deleted', el.id)"
+            class="bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
+            title="Supprimer"
+            :style="{ pointerEvents: 'auto' }"
+          >✕</button>
+          <button
+            @click="$emit('element-updated', { id: el.id, locked: !el.locked })"
+            :class="el.locked ? 'bg-yellow-400 text-zinc-900' : 'bg-zinc-700 text-white'"
+            class="hover:bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
+            :title="el.locked ? 'Déverrouiller' : 'Verrouiller'"
+            :style="{ pointerEvents: 'auto' }"
           >
-            <button
-              @click="$emit('element-deleted', el.id)"
-              class="bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
-              title="Supprimer"
-              style="pointer-events: auto;"
-            >✕</button>
-            <button
-              @click="$emit('element-updated', { id: el.id, locked: !el.locked })"
-              :class="el.locked ? 'bg-yellow-400 text-zinc-900' : 'bg-zinc-700 text-white'"
-              class="hover:bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
-              :title="el.locked ? 'Déverrouiller' : 'Verrouiller'"
-              style="pointer-events: auto;"
-            >
-              <span v-if="el.locked">🔒</span>
-              <span v-else>🔓</span>
-            </button>
-          </div>
-          
-          <!-- Le composant TextBlock.vue gère maintenant chaque élément de texte -->
+            <span v-if="el.locked">🔒</span>
+            <span v-else>🔓</span>
+          </button>
+        </div>
+        
+        <!-- Élément de type texte -->
+        <div v-if="el.type === 'text'">
           <TextBlock
             :block="{ ...el, isEditing: editingId === el.id }"
             :canvasSize="canvasSize"
@@ -430,7 +506,19 @@ watch(() => props.showGrid, drawCanvas);
             @interaction="handleInteraction"
             @text-change="handleTextChange"
             @text-blur="handleTextBlur"
-            style="pointer-events: auto;"
+            :style="{ pointerEvents: 'auto' }"
+          />
+        </div>
+        
+        <!-- Élément de type image -->
+        <div v-else-if="el.type === 'image'">
+          <ImageBlock
+            :block="el"
+            :canvasSize="canvasSize"
+            :is-active="selectedId === el.id"
+            @interaction="handleInteraction"
+            @image-loaded="handleImageLoaded"
+            :style="{ pointerEvents: 'auto' }"
           />
         </div>
       </template>
