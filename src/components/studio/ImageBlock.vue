@@ -5,58 +5,65 @@
     @mousedown.stop="emit('interaction', $event, block.id, 'move')"
   >
     <!-- Image container -->
-    <div ref="imageContainerRef" class="w-full h-full flex items-center justify-center overflow-hidden">
-      <!-- Border overlay that adapts to image dimensions -->
-      <div 
-        v-if="imageLoaded"
-        :class="['absolute', { 'border-2 border-blue-500 z-10': isActive, 'border-2 border-transparent hover:border-gray-400': !isActive }]"
-        :style="imageBorderStyle"
-      ></div>
-      
+    <div 
+      ref="imageContainerRef" 
+      class="relative"
+      :style="imageContainerStyle"
+    >
+      <!-- Image with hardware acceleration -->
       <img
         ref="imageRef"
         :src="block.src"
         :alt="block.alt || 'Image'"
-        class="max-w-full max-h-full object-contain relative z-0"
+        class="block will-change-transform cursor-move"
+        :style="imageStyle"
         @load="handleImageLoad"
+        @mousedown.stop="emit('interaction', $event, block.id, 'move')"
       />
+      
+      <!-- Border overlay with exact image dimensions -->
+      <div 
+        v-if="imageLoaded"
+        :class="['absolute inset-0 pointer-events-none', { 'border-2 border-blue-500 z-10': isActive, 'border-2 border-transparent hover:border-gray-400': !isActive }]"
+        :style="borderStyle"
+      ></div>
     </div>
 
-    <!-- Poignées de redimensionnement et rotation (visibles si le bloc est actif) -->
+    <!-- Poignées de redimensionnement et rotation -->
     <template v-if="isActive && imageLoaded">
-      <!-- Poignées d'angle adaptées à l'image -->
+      <!-- Poignées d'angle -->
       <div
-        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nwse-resize"
-        :style="handleStyleNW"
+        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nwse-resize z-20"
+        :style="getHandleStyle('nw')"
         @mousedown.prevent.stop="emit('interaction', $event, block.id, 'resize-nw')"
       />
       <div
-        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nesw-resize"
-        :style="handleStyleNE"
+        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nesw-resize z-20"
+        :style="getHandleStyle('ne')"
         @mousedown.prevent.stop="emit('interaction', $event, block.id, 'resize-ne')"
       />
       <div
-        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nesw-resize"
-        :style="handleStyleSW"
+        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nesw-resize z-20"
+        :style="getHandleStyle('sw')"
         @mousedown.prevent.stop="emit('interaction', $event, block.id, 'resize-sw')"
       />
       <div
-        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nwse-resize"
-        :style="handleStyleSE"
+        class="absolute w-3 h-3 bg-blue-500 border border-white cursor-nwse-resize z-20"
+        :style="getHandleStyle('se')"
         @mousedown.prevent.stop="emit('interaction', $event, block.id, 'resize-se')"
       />
 
       <!-- Poignée de rotation -->
       <div
-        class="absolute w-6 h-6 bg-green-500 border border-white cursor-grab rounded-full flex items-center justify-center transform -translate-x-1/2"
-        :style="rotateHandleStyle"
+        class="absolute w-6 h-6 bg-green-500 border border-white cursor-grab rounded-full flex items-center justify-center z-20"
+        :style="getHandleStyle('rotate')"
         @mousedown.prevent.stop="emit('interaction', $event, block.id, 'rotate')"
       >
         <RotateCw class="w-3 h-3 text-white" />
       </div>
       
       <!-- Boutons de suppression et verrouillage -->
-      <div class="absolute flex gap-1" style="top: -32px; left: 0;">
+      <div class="absolute flex gap-1 z-20" :style="getHandleStyle('controls')">
         <button
           @click.stop="emit('element-deleted', block.id)"
           class="bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-opacity opacity-70 hover:opacity-100"
@@ -77,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, reactive, watch, onMounted } from 'vue';
 import { RotateCw } from 'lucide-vue-next';
 
 // --- TYPE DEFINITIONS ---
@@ -114,14 +121,23 @@ const emit = defineEmits<{
   (e: 'interaction', event: MouseEvent, id: string, action: InteractionType): void;
   (e: 'imageLoaded', id: string, aspectRatio: number): void;
   (e: 'element-deleted', id: string): void;
-  (e: 'element-updated', update: { id: string, locked: boolean }): void;
+  (e: 'element-updated', update: { id: string, locked: boolean } | { id: string, width: number, height: number }): void;
 }>();
 
 // --- REFS ---
 const imageLoaded = ref(false);
 const imageRef = ref<HTMLImageElement | null>(null);
 const imageContainerRef = ref<HTMLDivElement | null>(null);
-const imageBounds = ref({ top: 0, left: 0, width: 0, height: 0 });
+
+// Dimensions réelles de l'image une fois chargée
+const imageDimensions = reactive({
+  width: 0,
+  height: 0,
+  offsetX: 0,
+  offsetY: 0,
+  naturalWidth: 0,
+  naturalHeight: 0
+});
 
 // --- UTILS ---
 const ratioToPixels = (ratio: number, dimension: 'width' | 'height'): number => {
@@ -139,43 +155,125 @@ const blockStyle = computed(() => ({
   transformOrigin: 'center',
 }));
 
-// Calcule les positions des poignées en fonction des dimensions réelles de l'image
-const handleStyleNW = computed(() => ({
-  left: `${imageBounds.value.left - 4}px`,
-  top: `${imageBounds.value.top - 4}px`,
+const imageContainerStyle = computed(() => ({
+  width: '100%',
+  height: '100%',
 }));
 
-const handleStyleNE = computed(() => ({
-  left: `${imageBounds.value.left + imageBounds.value.width - 4}px`,
-  top: `${imageBounds.value.top - 4}px`,
+// Calculer les dimensions de l'image une fois pour éviter les recalculs constants
+const calculateImageDimensions = () => {
+  if (!imageLoaded.value) return;
+  
+  const containerWidth = ratioToPixels(props.block.width, 'width');
+  const containerHeight = ratioToPixels(props.block.height, 'height');
+  
+  // Calculer les dimensions de l'image en respectant l'aspect ratio
+  const imageAspectRatio = imageDimensions.naturalWidth / imageDimensions.naturalHeight;
+  const containerAspectRatio = containerWidth / containerHeight;
+  
+  let displayWidth, displayHeight;
+  
+  if (imageAspectRatio > containerAspectRatio) {
+    // L'image est limitée par la largeur
+    displayWidth = containerWidth;
+    displayHeight = containerWidth / imageAspectRatio;
+  } else {
+    // L'image est limitée par la hauteur
+    displayHeight = containerHeight;
+    displayWidth = containerHeight * imageAspectRatio;
+  }
+  
+  // Centrer l'image
+  const offsetX = (containerWidth - displayWidth) / 2;
+  const offsetY = (containerHeight - displayHeight) / 2;
+  
+  // Mettre à jour les dimensions pour les poignées
+  imageDimensions.width = displayWidth;
+  imageDimensions.height = displayHeight;
+  imageDimensions.offsetX = offsetX;
+  imageDimensions.offsetY = offsetY;
+};
+
+const imageStyle = computed(() => {
+  if (!imageLoaded.value) {
+    return {
+      width: '100%',
+      height: '100%',
+      objectFit: 'contain' as const,
+    };
+  }
+  
+  return {
+    width: `${imageDimensions.width}px`,
+    height: `${imageDimensions.height}px`,
+    position: 'absolute' as const,
+    transform: `translate(${imageDimensions.offsetX}px, ${imageDimensions.offsetY}px)`,
+    left: 0,
+    top: 0,
+  };
+});
+
+const borderStyle = computed(() => ({
+  left: `${imageDimensions.offsetX}px`,
+  top: `${imageDimensions.offsetY}px`,
+  width: `${imageDimensions.width}px`,
+  height: `${imageDimensions.height}px`,
 }));
 
-const handleStyleSW = computed(() => ({
-  left: `${imageBounds.value.left - 4}px`,
-  top: `${imageBounds.value.top + imageBounds.value.height - 4}px`,
-}));
-
-const handleStyleSE = computed(() => ({
-  left: `${imageBounds.value.left + imageBounds.value.width - 4}px`,
-  top: `${imageBounds.value.top + imageBounds.value.height - 4}px`,
-}));
-
-const rotateHandleStyle = computed(() => ({
-  left: `${imageBounds.value.left + imageBounds.value.width / 2}px`,
-  top: `${imageBounds.value.top - 24}px`,
-}));
-
-// Style pour la bordure qui s'adapte à l'image
-const imageBorderStyle = computed(() => ({
-  left: `${imageBounds.value.left}px`,
-  top: `${imageBounds.value.top}px`,
-  width: `${imageBounds.value.width}px`,
-  height: `${imageBounds.value.height}px`,
-}));
+// --- HANDLE POSITIONS ---
+const getHandleStyle = (position: string) => {
+  const { width, height, offsetX, offsetY } = imageDimensions;
+  
+  switch (position) {
+    case 'nw':
+      return {
+        transform: `translate(${offsetX - 4}px, ${offsetY - 4}px)`,
+        left: 0,
+        top: 0,
+      };
+    case 'ne':
+      return {
+        transform: `translate(${offsetX + width - 4}px, ${offsetY - 4}px)`,
+        left: 0,
+        top: 0,
+      };
+    case 'sw':
+      return {
+        transform: `translate(${offsetX - 4}px, ${offsetY + height - 4}px)`,
+        left: 0,
+        top: 0,
+      };
+    case 'se':
+      return {
+        transform: `translate(${offsetX + width - 4}px, ${offsetY + height - 4}px)`,
+        left: 0,
+        top: 0,
+      };
+    case 'rotate':
+      return {
+        transform: `translate(${offsetX + width / 2 - 12}px, ${offsetY - 30}px)`,
+        left: 0,
+        top: 0,
+      };
+    case 'controls':
+      return {
+        transform: `translate(${offsetX}px, ${offsetY - 32}px)`,
+        left: 0,
+        top: 0,
+      };
+    default:
+      return {};
+  }
+};
 
 // --- HANDLERS ---
 const handleImageLoad = (event: Event) => {
   const img = event.target as HTMLImageElement;
+  
+  // Stocker les dimensions naturelles
+  imageDimensions.naturalWidth = img.naturalWidth;
+  imageDimensions.naturalHeight = img.naturalHeight;
+  
   const aspectRatio = img.naturalWidth / img.naturalHeight;
   
   // Émettre l'événement pour mettre à jour l'aspect ratio dans le parent
@@ -183,66 +281,31 @@ const handleImageLoad = (event: Event) => {
   
   imageLoaded.value = true;
   
-  // Calculer les dimensions réelles de l'image après chargement
-  setTimeout(updateImageBounds, 0);
+  // Calculer les dimensions initiales de l'image
+  calculateImageDimensions();
 };
 
-// Observer les changements de dimensions du bloc pour mettre à jour les poignées
-watch(() => [props.block.width, props.block.height, props.block.rotation], () => {
-  if (imageLoaded.value) {
-    // Attendre que le DOM soit mis à jour avec les nouvelles dimensions
-    setTimeout(updateImageBounds, 0);
-  }
-});
+// Observer les changements de dimensions du bloc pour recalculer les dimensions de l'image
+watch(
+  () => [props.block.width, props.block.height, props.block.x, props.block.y, props.block.rotation],
+  () => {
+    if (imageLoaded.value) {
+      calculateImageDimensions();
+    }
+  },
+  { flush: 'post' } // S'assurer que les calculs sont faits après les mises à jour du DOM
+);
 
-// S'assurer que les poignées sont mises à jour après le montage du composant
+// S'assurer que les dimensions sont calculées après le montage du composant
 onMounted(() => {
-  if (imageRef.value && imageRef.value.complete) {
+  if (imageRef.value && imageRef.value.complete && imageRef.value.naturalWidth > 0) {
     // Si l'image est déjà chargée depuis le cache
+    imageDimensions.naturalWidth = imageRef.value.naturalWidth;
+    imageDimensions.naturalHeight = imageRef.value.naturalHeight;
     imageLoaded.value = true;
-    setTimeout(updateImageBounds, 0);
+    calculateImageDimensions();
   }
 });
-
-// Mettre à jour les dimensions réelles de l'image dans le conteneur
-const updateImageBounds = () => {
-  if (!imageRef.value || !imageContainerRef.value) return;
-  
-  const img = imageRef.value;
-  const container = imageContainerRef.value;
-  
-  // Calculer les dimensions réelles de l'image dans le conteneur
-  const containerWidth = container.offsetWidth;
-  const containerHeight = container.offsetHeight;
-  
-  // Calculer les dimensions de l'image en respectant object-contain
-  const imgRatio = img.naturalWidth / img.naturalHeight;
-  const containerRatio = containerWidth / containerHeight;
-  
-  let imgWidth, imgHeight;
-  
-  if (imgRatio > containerRatio) {
-    // L'image est limitée par la largeur
-    imgWidth = containerWidth;
-    imgHeight = containerWidth / imgRatio;
-  } else {
-    // L'image est limitée par la hauteur
-    imgHeight = containerHeight;
-    imgWidth = containerHeight * imgRatio;
-  }
-  
-  // Calculer la position de l'image centrée dans le conteneur
-  const imgLeft = (containerWidth - imgWidth) / 2;
-  const imgTop = (containerHeight - imgHeight) / 2;
-  
-  // Mettre à jour les dimensions pour les poignées
-  imageBounds.value = {
-    left: imgLeft,
-    top: imgTop,
-    width: imgWidth,
-    height: imgHeight
-  };
-};
 </script>
 
 <style scoped>

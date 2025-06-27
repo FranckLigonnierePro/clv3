@@ -67,7 +67,7 @@ import { ref } from "vue";
 import Canvas from "../components/studio/Canvas.vue";
 import LeftPanel from "../components/studio/LeftPanel.vue";
 import ChatSidebar from "../components/studio/ChatSidebar.vue";
-import { Grid2X2 } from "lucide-vue-next";
+import { Grid2X2, Magnet } from "lucide-vue-next";
 import StudioFooter from "../components/studio/StudioFooter.vue";
 
 const showGrid = ref(false);
@@ -325,15 +325,14 @@ const toggleSnap = () => {
       </aside>
       <div class="flex flex-1">
         <main class="flex-1 flex flex-col p-4 gap-4">
-          <h1 class="text-3xl font-bold text-gray-800 dark:text-white flex-shrink-0">
-            Ratio 16:9 Optimisé
-          </h1>
-          <button @click="showGrid = !showGrid" class="text-white">
+          <div >
+          <button @click="showGrid = !showGrid" :class="{ 'bg-zinc-800': showGrid }" class="text-white rounded-xl p-1 hover:bg-zinc-700">
             <Grid2X2 />
           </button>
-          <button @click="toggleSnap" :class="{ active: snapEnabled }" class="text-white">
-            Snap grille : <strong>{{ snapEnabled ? 'Activé' : 'Désactivé' }}</strong>
+          <button @click="toggleSnap" :class="{ 'bg-zinc-800': snapEnabled }" class="text-white rounded-xl p-1 hover:bg-zinc-700">
+            <Magnet />
           </button>
+        </div>
           <div id="studio-canvas" class="w-full min-h-0 pb-16">
             <Canvas 
               ref="canvasRef"

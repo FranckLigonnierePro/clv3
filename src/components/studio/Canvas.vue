@@ -319,9 +319,31 @@ function handleCameraLoaded(id: string, aspectRatio: number) {
 
 // --- LOGIQUE DE DÉPLACEMENT / REDIMENSIONNEMENT / ROTATION ---
 
+// Utiliser requestAnimationFrame pour limiter les mises à jour et améliorer les performances
+let lastMouseMoveEvent: MouseEvent | null = null;
+let animationFrameId: number | null = null;
+
 function handleMouseMove(e: MouseEvent) {
   if (!draggingState.value) return;
+  
+  // Stocker le dernier événement de souris
+  lastMouseMoveEvent = e;
+  
+  // Si un frame d'animation est déjà prévu, ne pas en planifier un autre
+  if (animationFrameId !== null) return;
+  
+  // Planifier une mise à jour au prochain frame d'animation
+  animationFrameId = requestAnimationFrame(processMouseMove);
+}
 
+function processMouseMove() {
+  // Réinitialiser l'ID du frame d'animation
+  animationFrameId = null;
+  
+  // Si aucun événement de souris n'est disponible ou pas d'état de drag, sortir
+  if (!lastMouseMoveEvent || !draggingState.value) return;
+  
+  const e = lastMouseMoveEvent;
   const { startX, startY, initialBlock, action, blockId } = draggingState.value;
   const deltaX = e.clientX - startX;
   const deltaY = e.clientY - startY;
@@ -436,7 +458,14 @@ function handleMouseUp() {
     // Émet l'état final complet de l'élément à la fin du glisser-déposer
     emit('element-updated', { ...block });
   }
-
+  
+  // Nettoyer les ressources d'animation
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+  lastMouseMoveEvent = null;
+  
   draggingState.value = null;
 }
 
