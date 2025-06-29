@@ -393,65 +393,62 @@ function processMouseMove() {
         // Calcul des dimensions et positions en fonction de la poignée utilisée
         let newWidth, newHeight, newX, newY;
         
-        // Utiliser des calculs directs pour chaque poignée
+        // Déterminer quelle dimension utiliser comme référence (la plus grande variation)
+        const deltaWidthAbs = Math.abs(deltaRatioX);
+        const deltaHeightAbs = Math.abs(deltaRatioY);
+        const useWidthAsReference = deltaWidthAbs > deltaHeightAbs;
+        
         switch (resizeHandle) {
-          case 'se': // Coin inférieur droit - Point d'ancrage: supérieur gauche (x,y fixes)
-            newX = initialX;
+          case 'se': // Coin inférieur droit - Point d'ancrage: coin supérieur gauche (initialX, initialY)
+            newX = initialX; // Point d'ancrage fixe
+            newY = initialY; // Point d'ancrage fixe
+            
+            if (useWidthAsReference) {
+              newWidth = Math.max(0.05, initialWidth + deltaRatioX);
+              newHeight = newWidth / aspectRatio;
+            } else {
+              newHeight = Math.max(0.02, initialHeight + deltaRatioY);
+              newWidth = newHeight * aspectRatio;
+            }
+            break;
+            
+          case 'sw': // Coin inférieur gauche - Point d'ancrage: coin supérieur droit
+            if (useWidthAsReference) {
+              newWidth = Math.max(0.05, initialWidth - deltaRatioX);
+              newHeight = newWidth / aspectRatio;
+            } else {
+              newHeight = Math.max(0.02, initialHeight + deltaRatioY);
+              newWidth = newHeight * aspectRatio;
+            }
+            // Point d'ancrage: coin supérieur droit reste fixe
+            newX = initialX + initialWidth - newWidth;
             newY = initialY;
+            break;
             
-            // Déterminer la dimension dominante
-            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+          case 'ne': // Coin supérieur droit - Point d'ancrage: coin inférieur gauche
+            if (useWidthAsReference) {
               newWidth = Math.max(0.05, initialWidth + deltaRatioX);
               newHeight = newWidth / aspectRatio;
             } else {
-              newHeight = Math.max(0.02, initialHeight + deltaRatioY);
+              newHeight = Math.max(0.02, initialHeight - deltaRatioY);
               newWidth = newHeight * aspectRatio;
             }
+            // Point d'ancrage: coin inférieur gauche reste fixe
+            newX = initialX;
+            newY = initialY + initialHeight - newHeight;
             break;
             
-          case 'sw': // Coin inférieur gauche - Point d'ancrage: supérieur droit (x+width,y fixes)
-            // Déterminer la dimension dominante
-            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+          case 'nw': // Coin supérieur gauche - Point d'ancrage: coin inférieur droit
+            if (useWidthAsReference) {
               newWidth = Math.max(0.05, initialWidth - deltaRatioX);
               newHeight = newWidth / aspectRatio;
-              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
-              newY = initialY; // Y reste fixe
-            } else {
-              newHeight = Math.max(0.02, initialHeight + deltaRatioY);
-              newWidth = newHeight * aspectRatio;
-              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
-              newY = initialY; // Y reste fixe
-            }
-            break;
-            
-          case 'ne': // Coin supérieur droit - Point d'ancrage: inférieur gauche (x,y+height fixes)
-            // Déterminer la dimension dominante
-            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
-              newWidth = Math.max(0.05, initialWidth + deltaRatioX);
-              newHeight = newWidth / aspectRatio;
-              newX = initialX; // X reste fixe
-              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
             } else {
               newHeight = Math.max(0.02, initialHeight - deltaRatioY);
               newWidth = newHeight * aspectRatio;
-              newX = initialX; // X reste fixe
-              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
             }
-            break;
-            
-          case 'nw': // Coin supérieur gauche - Point d'ancrage: inférieur droit (x+width,y+height fixes)
-            // Déterminer la dimension dominante
-            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
-              newWidth = Math.max(0.05, initialWidth - deltaRatioX);
-              newHeight = newWidth / aspectRatio;
-              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
-              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
-            } else {
-              newHeight = Math.max(0.02, initialHeight - deltaRatioY);
-              newWidth = newHeight * aspectRatio;
-              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
-              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
-            }
+            // Point d'ancrage: coin inférieur droit reste fixe
+            newX = initialX + initialWidth - newWidth;
+            newY = initialY + initialHeight - newHeight;
             break;
             
           default:
@@ -462,7 +459,7 @@ function processMouseMove() {
             newHeight = initialHeight;
         }
         
-        // Taille minimale pour les images
+        // Appliquer les changements seulement si les dimensions sont valides
         if (newWidth >= 0.05 && newHeight >= 0.02) {
           changes = {
             x: newX,
@@ -614,7 +611,6 @@ watch(() => props.showGrid, drawCanvas);
       :height="canvasSize.height"
       class="w-full h-full block rounded-2xl"
     ></canvas>
-    {{ props.elements }}
     <!-- L'overlay capture les clics "à l'extérieur" -->
     <div 
       ref="canvasOverlayRef" 
