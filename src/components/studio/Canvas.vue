@@ -383,48 +383,54 @@ function processMouseMove() {
       if (currentBlock.type === 'image' && 'aspectRatio' in currentBlock) {
         const aspectRatio = currentBlock.aspectRatio;
         
+        // Déterminer le point d'ancrage en fonction de la poignée utilisée
+        const resizeHandle = action.replace('resize-', '');
+        
+        // Déterminer le point d'ancrage diagonal opposé
+        let anchorPoint;
+        switch(resizeHandle) {
+          case 'nw': anchorPoint = 'se'; break; // Coin supérieur gauche -> ancrage inférieur droit
+          case 'ne': anchorPoint = 'sw'; break; // Coin supérieur droit -> ancrage inférieur gauche
+          case 'sw': anchorPoint = 'ne'; break; // Coin inférieur gauche -> ancrage supérieur droit
+          case 'se': anchorPoint = 'nw'; break; // Coin inférieur droit -> ancrage supérieur gauche
+          default: anchorPoint = 'nw'; // Par défaut
+        }
+        
         // Calculer le changement de taille en fonction de la direction de redimensionnement
         let newWidth, newHeight;
         let newX = initialBlock.x;
         let newY = initialBlock.y;
         
-        // Déterminer le point d'ancrage en fonction de la poignée utilisée
-        const anchorCorner = action.replace('resize-', '');
-        
         // Déterminer quelle dimension contrôle le redimensionnement
-        if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+        const isHorizontalDominant = Math.abs(deltaRatioX) > Math.abs(deltaRatioY);
+        
+        if (isHorizontalDominant) {
           // Redimensionnement horizontal dominant
-          if (anchorCorner.includes('e')) { // Poignée est (droite)
-            newWidth = initialBlock.width + deltaRatioX;
-            // Point d'ancrage à gauche, x ne change pas
+          if (resizeHandle.includes('e')) { // Poignée est (droite)
+            newWidth = Math.max(0.05, initialBlock.width + deltaRatioX);
           } else { // Poignée ouest (gauche)
-            newWidth = initialBlock.width - deltaRatioX;
-            // Point d'ancrage à droite, x doit être ajusté
-            newX = initialBlock.x + deltaRatioX;
+            newWidth = Math.max(0.05, initialBlock.width - deltaRatioX);
           }
           newHeight = newWidth / aspectRatio;
-          
-          // Ajuster y en fonction de la poignée (nord/sud)
-          if (anchorCorner.includes('n')) { // Poignée nord (haut)
-            newY = initialBlock.y + initialBlock.height - newHeight;
-          } // Sinon, poignée sud (bas), y ne change pas
-          
         } else {
           // Redimensionnement vertical dominant
-          if (anchorCorner.includes('s')) { // Poignée sud (bas)
-            newHeight = initialBlock.height + deltaRatioY;
-            // Point d'ancrage en haut, y ne change pas
+          if (resizeHandle.includes('s')) { // Poignée sud (bas)
+            newHeight = Math.max(0.02, initialBlock.height + deltaRatioY);
           } else { // Poignée nord (haut)
-            newHeight = initialBlock.height - deltaRatioY;
-            // Point d'ancrage en bas, y doit être ajusté
-            newY = initialBlock.y + deltaRatioY;
+            newHeight = Math.max(0.02, initialBlock.height - deltaRatioY);
           }
           newWidth = newHeight * aspectRatio;
-          
-          // Ajuster x en fonction de la poignée (est/ouest)
-          if (anchorCorner.includes('w')) { // Poignée ouest (gauche)
-            newX = initialBlock.x + initialBlock.width - newWidth;
-          } // Sinon, poignée est (droite), x ne change pas
+        }
+        
+        // Calculer les nouvelles coordonnées en fonction du point d'ancrage
+        if (anchorPoint.includes('s')) { // Point d'ancrage en bas
+          // Y reste fixe en bas, donc on ajuste Y pour que le bas reste fixe
+          newY = initialBlock.y + initialBlock.height - newHeight;
+        }
+        
+        if (anchorPoint.includes('e')) { // Point d'ancrage à droite
+          // X reste fixe à droite, donc on ajuste X pour que la droite reste fixe
+          newX = initialBlock.x + initialBlock.width - newWidth;
         }
         
         // Taille minimale pour les images
