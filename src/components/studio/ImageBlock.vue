@@ -1,6 +1,6 @@
 <template>
   <div
-    class="absolute cursor-move select-none"
+    class="block-container absolute cursor-move select-none"
     :style="blockStyle"
     @mousedown.stop="emit('interaction', $event, block.id, 'move')"
   >
@@ -146,14 +146,29 @@ const ratioToPixels = (ratio: number, dimension: 'width' | 'height'): number => 
 };
 
 // --- COMPUTED STYLES ---
-const blockStyle = computed(() => ({
-  left: `${ratioToPixels(props.block.x, 'width')}px`,
-  top: `${ratioToPixels(props.block.y, 'height')}px`,
-  width: `${ratioToPixels(props.block.width, 'width')}px`,
-  height: `${ratioToPixels(props.block.height, 'height')}px`,
-  transform: `rotate(${props.block.rotation}deg)`,
-  transformOrigin: 'center',
-}));
+const blockStyle = computed(() => {
+  if (!imageLoaded.value) {
+    // Style initial avant le chargement de l'image
+    return {
+      left: `${ratioToPixels(props.block.x, 'width')}px`,
+      top: `${ratioToPixels(props.block.y, 'height')}px`,
+      width: `${ratioToPixels(props.block.width, 'width')}px`,
+      height: `${ratioToPixels(props.block.height, 'height')}px`,
+      transform: `rotate(${props.block.rotation}deg)`,
+      transformOrigin: 'center',
+    };
+  }
+  
+  // Une fois l'image chargée, utiliser les dimensions réelles de l'image
+  return {
+    left: `${ratioToPixels(props.block.x, 'width') + imageDimensions.offsetX}px`,
+    top: `${ratioToPixels(props.block.y, 'height') + imageDimensions.offsetY}px`,
+    width: `${imageDimensions.width}px`,
+    height: `${imageDimensions.height}px`,
+    transform: `rotate(${props.block.rotation}deg)`,
+    transformOrigin: 'center',
+  };
+});
 
 const imageContainerStyle = computed(() => ({
   width: '100%',
@@ -203,63 +218,59 @@ const imageStyle = computed(() => {
     };
   }
   
+  // Maintenant que le conteneur a la même taille que l'image, l'image remplit simplement 100% du conteneur
   return {
-    width: `${imageDimensions.width}px`,
-    height: `${imageDimensions.height}px`,
+    width: '100%',
+    height: '100%',
     position: 'absolute' as const,
-    transform: `translate(${imageDimensions.offsetX}px, ${imageDimensions.offsetY}px)`,
     left: 0,
     top: 0,
   };
 });
 
+// Maintenant que le conteneur a la même taille que l'image, le contour doit simplement couvrir 100% du conteneur
 const borderStyle = computed(() => ({
-  left: `${imageDimensions.offsetX}px`,
-  top: `${imageDimensions.offsetY}px`,
-  width: `${imageDimensions.width}px`,
-  height: `${imageDimensions.height}px`,
+  left: 0,
+  top: 0,
+  width: '100%',
+  height: '100%',
 }));
 
 // --- HANDLE POSITIONS ---
 const getHandleStyle = (position: string) => {
-  const { width, height, offsetX, offsetY } = imageDimensions;
+  // La taille des poignées est de 12px (w-3 dans Tailwind)
+  const handleSize = 6; // Moitié de la taille pour centrer (12px / 2)
   
   switch (position) {
-    case 'nw':
+    case 'nw': // Coin supérieur gauche
       return {
-        transform: `translate(${offsetX - 4}px, ${offsetY - 4}px)`,
-        left: 0,
-        top: 0,
+        left: `-${handleSize}px`,
+        top: `-${handleSize}px`,
       };
-    case 'ne':
+    case 'ne': // Coin supérieur droit
       return {
-        transform: `translate(${offsetX + width - 4}px, ${offsetY - 4}px)`,
-        left: 0,
-        top: 0,
+        right: `-${handleSize}px`,
+        top: `-${handleSize}px`,
       };
-    case 'sw':
+    case 'sw': // Coin inférieur gauche
       return {
-        transform: `translate(${offsetX - 4}px, ${offsetY + height - 4}px)`,
-        left: 0,
-        top: 0,
+        left: `-${handleSize}px`,
+        bottom: `-${handleSize}px`,
       };
-    case 'se':
+    case 'se': // Coin inférieur droit
       return {
-        transform: `translate(${offsetX + width - 4}px, ${offsetY + height - 4}px)`,
-        left: 0,
-        top: 0,
+        right: `-${handleSize}px`,
+        bottom: `-${handleSize}px`,
       };
-    case 'rotate':
+    case 'rotate': // Poignée de rotation (centrée en haut)
       return {
-        transform: `translate(${offsetX + width / 2 - 12}px, ${offsetY - 30}px)`,
-        left: 0,
-        top: 0,
+        left: `calc(50% - 6px)`,
+        top: `-30px`,
       };
-    case 'controls':
+    case 'controls': // Contrôles (en haut à gauche)
       return {
-        transform: `translate(${offsetX}px, ${offsetY - 32}px)`,
-        left: 0,
-        top: 0,
+        left: `0`,
+        top: `-32px`,
       };
     default:
       return {};

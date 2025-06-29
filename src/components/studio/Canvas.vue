@@ -385,23 +385,47 @@ function processMouseMove() {
         
         // Calculer le changement de taille en fonction de la direction de redimensionnement
         let newWidth, newHeight;
+        let newX = initialBlock.x;
+        let newY = initialBlock.y;
+        
+        // Déterminer le point d'ancrage en fonction de la poignée utilisée
+        const anchorCorner = action.replace('resize-', '');
         
         // Déterminer quelle dimension contrôle le redimensionnement
         if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
           // Redimensionnement horizontal dominant
-          newWidth = initialBlock.width + (action.includes('e') ? deltaRatioX : -deltaRatioX);
+          if (anchorCorner.includes('e')) { // Poignée est (droite)
+            newWidth = initialBlock.width + deltaRatioX;
+            // Point d'ancrage à gauche, x ne change pas
+          } else { // Poignée ouest (gauche)
+            newWidth = initialBlock.width - deltaRatioX;
+            // Point d'ancrage à droite, x doit être ajusté
+            newX = initialBlock.x + deltaRatioX;
+          }
           newHeight = newWidth / aspectRatio;
+          
+          // Ajuster y en fonction de la poignée (nord/sud)
+          if (anchorCorner.includes('n')) { // Poignée nord (haut)
+            newY = initialBlock.y + initialBlock.height - newHeight;
+          } // Sinon, poignée sud (bas), y ne change pas
+          
         } else {
           // Redimensionnement vertical dominant
-          newHeight = initialBlock.height + (action.includes('s') ? deltaRatioY : -deltaRatioY);
+          if (anchorCorner.includes('s')) { // Poignée sud (bas)
+            newHeight = initialBlock.height + deltaRatioY;
+            // Point d'ancrage en haut, y ne change pas
+          } else { // Poignée nord (haut)
+            newHeight = initialBlock.height - deltaRatioY;
+            // Point d'ancrage en bas, y doit être ajusté
+            newY = initialBlock.y + deltaRatioY;
+          }
           newWidth = newHeight * aspectRatio;
+          
+          // Ajuster x en fonction de la poignée (est/ouest)
+          if (anchorCorner.includes('w')) { // Poignée ouest (gauche)
+            newX = initialBlock.x + initialBlock.width - newWidth;
+          } // Sinon, poignée est (droite), x ne change pas
         }
-        
-        let newX = initialBlock.x;
-        let newY = initialBlock.y;
-        
-        if (action.includes('w')) { newX = initialBlock.x + initialBlock.width - newWidth; }
-        if (action.includes('n')) { newY = initialBlock.y + initialBlock.height - newHeight; }
         
         // Taille minimale pour les images
         if (newWidth >= 0.05 && newHeight >= 0.02) {
