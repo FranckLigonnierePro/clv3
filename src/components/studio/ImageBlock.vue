@@ -159,10 +159,11 @@ const blockStyle = computed(() => {
     };
   }
   
-  // Une fois l'image chargée, utiliser les dimensions réelles de l'image
+  // Utiliser les coordonnées du bloc pour le positionnement
+  // mais les dimensions réelles de l'image pour la taille
   return {
-    left: `${ratioToPixels(props.block.x, 'width') + imageDimensions.offsetX}px`,
-    top: `${ratioToPixels(props.block.y, 'height') + imageDimensions.offsetY}px`,
+    left: `${ratioToPixels(props.block.x, 'width')}px`,
+    top: `${ratioToPixels(props.block.y, 'height')}px`,
     width: `${imageDimensions.width}px`,
     height: `${imageDimensions.height}px`,
     transform: `rotate(${props.block.rotation}deg)`,
@@ -184,11 +185,11 @@ const calculateImageDimensions = () => {
   
   // Calculer les dimensions de l'image en respectant l'aspect ratio
   const imageAspectRatio = imageDimensions.naturalWidth / imageDimensions.naturalHeight;
-  const containerAspectRatio = containerWidth / containerHeight;
   
+  // Calculer les dimensions en respectant le ratio d'aspect original
   let displayWidth, displayHeight;
   
-  if (imageAspectRatio > containerAspectRatio) {
+  if (imageAspectRatio > containerWidth / containerHeight) {
     // L'image est limitée par la largeur
     displayWidth = containerWidth;
     displayHeight = containerWidth / imageAspectRatio;
@@ -198,15 +199,16 @@ const calculateImageDimensions = () => {
     displayWidth = containerHeight * imageAspectRatio;
   }
   
-  // Centrer l'image
-  const offsetX = (containerWidth - displayWidth) / 2;
-  const offsetY = (containerHeight - displayHeight) / 2;
-  
-  // Mettre à jour les dimensions pour les poignées
+  // Mettre à jour les dimensions pour qu'elles respectent le ratio d'aspect
   imageDimensions.width = displayWidth;
   imageDimensions.height = displayHeight;
-  imageDimensions.offsetX = offsetX;
-  imageDimensions.offsetY = offsetY;
+  
+  // Centrer l'image si nécessaire (mais sans décalage pour le conteneur)
+  imageDimensions.offsetX = 0;
+  imageDimensions.offsetY = 0;
+  
+  // Émettre un événement pour mettre à jour le ratio d'aspect dans le parent
+  emit('updateAspectRatio', props.block.id, imageAspectRatio);
 };
 
 const imageStyle = computed(() => {

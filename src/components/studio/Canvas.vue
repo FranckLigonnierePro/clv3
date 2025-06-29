@@ -382,55 +382,84 @@ function processMouseMove() {
       // Gestion spéciale pour les images (maintien du ratio)
       if (currentBlock.type === 'image' && 'aspectRatio' in currentBlock) {
         const aspectRatio = currentBlock.aspectRatio;
-        
-        // Déterminer le point d'ancrage en fonction de la poignée utilisée
         const resizeHandle = action.replace('resize-', '');
         
-        // Déterminer le point d'ancrage diagonal opposé
-        let anchorPoint;
-        switch(resizeHandle) {
-          case 'nw': anchorPoint = 'se'; break; // Coin supérieur gauche -> ancrage inférieur droit
-          case 'ne': anchorPoint = 'sw'; break; // Coin supérieur droit -> ancrage inférieur gauche
-          case 'sw': anchorPoint = 'ne'; break; // Coin inférieur gauche -> ancrage supérieur droit
-          case 'se': anchorPoint = 'nw'; break; // Coin inférieur droit -> ancrage supérieur gauche
-          default: anchorPoint = 'nw'; // Par défaut
-        }
+        // Valeurs initiales
+        const initialX = initialBlock.x;
+        const initialY = initialBlock.y;
+        const initialWidth = initialBlock.width;
+        const initialHeight = initialBlock.height;
         
-        // Calculer le changement de taille en fonction de la direction de redimensionnement
-        let newWidth, newHeight;
-        let newX = initialBlock.x;
-        let newY = initialBlock.y;
+        // Calcul des dimensions et positions en fonction de la poignée utilisée
+        let newWidth, newHeight, newX, newY;
         
-        // Déterminer quelle dimension contrôle le redimensionnement
-        const isHorizontalDominant = Math.abs(deltaRatioX) > Math.abs(deltaRatioY);
-        
-        if (isHorizontalDominant) {
-          // Redimensionnement horizontal dominant
-          if (resizeHandle.includes('e')) { // Poignée est (droite)
-            newWidth = Math.max(0.05, initialBlock.width + deltaRatioX);
-          } else { // Poignée ouest (gauche)
-            newWidth = Math.max(0.05, initialBlock.width - deltaRatioX);
-          }
-          newHeight = newWidth / aspectRatio;
-        } else {
-          // Redimensionnement vertical dominant
-          if (resizeHandle.includes('s')) { // Poignée sud (bas)
-            newHeight = Math.max(0.02, initialBlock.height + deltaRatioY);
-          } else { // Poignée nord (haut)
-            newHeight = Math.max(0.02, initialBlock.height - deltaRatioY);
-          }
-          newWidth = newHeight * aspectRatio;
-        }
-        
-        // Calculer les nouvelles coordonnées en fonction du point d'ancrage
-        if (anchorPoint.includes('s')) { // Point d'ancrage en bas
-          // Y reste fixe en bas, donc on ajuste Y pour que le bas reste fixe
-          newY = initialBlock.y + initialBlock.height - newHeight;
-        }
-        
-        if (anchorPoint.includes('e')) { // Point d'ancrage à droite
-          // X reste fixe à droite, donc on ajuste X pour que la droite reste fixe
-          newX = initialBlock.x + initialBlock.width - newWidth;
+        // Utiliser des calculs directs pour chaque poignée
+        switch (resizeHandle) {
+          case 'se': // Coin inférieur droit - Point d'ancrage: supérieur gauche (x,y fixes)
+            newX = initialX;
+            newY = initialY;
+            
+            // Déterminer la dimension dominante
+            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+              newWidth = Math.max(0.05, initialWidth + deltaRatioX);
+              newHeight = newWidth / aspectRatio;
+            } else {
+              newHeight = Math.max(0.02, initialHeight + deltaRatioY);
+              newWidth = newHeight * aspectRatio;
+            }
+            break;
+            
+          case 'sw': // Coin inférieur gauche - Point d'ancrage: supérieur droit (x+width,y fixes)
+            // Déterminer la dimension dominante
+            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+              newWidth = Math.max(0.05, initialWidth - deltaRatioX);
+              newHeight = newWidth / aspectRatio;
+              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
+              newY = initialY; // Y reste fixe
+            } else {
+              newHeight = Math.max(0.02, initialHeight + deltaRatioY);
+              newWidth = newHeight * aspectRatio;
+              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
+              newY = initialY; // Y reste fixe
+            }
+            break;
+            
+          case 'ne': // Coin supérieur droit - Point d'ancrage: inférieur gauche (x,y+height fixes)
+            // Déterminer la dimension dominante
+            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+              newWidth = Math.max(0.05, initialWidth + deltaRatioX);
+              newHeight = newWidth / aspectRatio;
+              newX = initialX; // X reste fixe
+              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
+            } else {
+              newHeight = Math.max(0.02, initialHeight - deltaRatioY);
+              newWidth = newHeight * aspectRatio;
+              newX = initialX; // X reste fixe
+              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
+            }
+            break;
+            
+          case 'nw': // Coin supérieur gauche - Point d'ancrage: inférieur droit (x+width,y+height fixes)
+            // Déterminer la dimension dominante
+            if (Math.abs(deltaRatioX) > Math.abs(deltaRatioY)) {
+              newWidth = Math.max(0.05, initialWidth - deltaRatioX);
+              newHeight = newWidth / aspectRatio;
+              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
+              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
+            } else {
+              newHeight = Math.max(0.02, initialHeight - deltaRatioY);
+              newWidth = newHeight * aspectRatio;
+              newX = initialX + initialWidth - newWidth; // Ajuster X pour que le côté droit reste fixe
+              newY = initialY + initialHeight - newHeight; // Ajuster Y pour que le bas reste fixe
+            }
+            break;
+            
+          default:
+            // Cas par défaut (ne devrait pas arriver)
+            newX = initialX;
+            newY = initialY;
+            newWidth = initialWidth;
+            newHeight = initialHeight;
         }
         
         // Taille minimale pour les images
